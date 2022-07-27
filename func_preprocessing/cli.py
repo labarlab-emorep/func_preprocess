@@ -4,26 +4,20 @@ Desc.
 
 Example
 -------
-code_dir=/hpc/home/nmm51/projects/func_preprocessing
-log_dir=/hpc/group/labarlab/EmoRep_BIDS/logs
-sbatch \
-    --job-name=mainPP \
-    --output=$log_dir \
-    --mem-per-cpu=4000 \
-    func_preprocessing \
-        -c $code_dir \
-        -s sub-ER0009
+func_preprocessing -s sub-ER0009
 """
+# %%
 import os
 import sys
 import glob
 import textwrap
 import subprocess
+from fnmatch import fnmatch
 from argparse import ArgumentParser, RawTextHelpFormatter
-from func_preprocessing import preprocess
 
 
-def _schedule_subj(subj_deriv, subj):
+# %%
+def _schedule_subj(work_dir, subj, sess, subj_t1):
     """Title.
 
     Desc.
@@ -31,30 +25,32 @@ def _schedule_subj(subj_deriv, subj):
     sbatch_cmd = f"""\
         #!/bin/env {sys.executable}
 
-        #SBATCH --job-name=p{subj[4:]}
-        #SBATCH --output={subj_deriv}/parent_out.txt
-        #SBATCH --time=20:00:00
+        #SBATCH --job-name=p{subj[4:]}{sess[4:]}
+        #SBATCH --output={work_dir}/logs/p{subj[4:]}-{sess[4:]}.txt
+        #SBATCH --time=00:10:00
         #SBATCH --mem=4000
 
         import os
         import sys
-        # sys.path.append("{code_dir}")
         from func_preprocessing import preprocess
 
+        work_fs = "{work_dir}/freesurfer_{sess[4:]}"
+        work_orig = os.path.join(work_fs, "{subj}/mri/orig")
+        if not os.path.exists(work_orig):
+            os.makedirs(work_orig)
+
         fs_exists = preprocess.freesurfer(
-            {deriv_dir},
-            {subj_deriv},
+            work_fs,
             {subj_t1},
             {subj},
-            {sess},
         )
         if not fs_exists:
             raise FileNotFoundError
 
-        preprocess.fmriprep()
+        # preprocess.fmriprep()
     """
     sbatch_cmd = textwrap.dedent(sbatch_cmd)
-    sbatch_script = os.path.join(subj_deriv, "run_fs_fmriprep.py")
+    py_script = f"{work_dir}/logs/run_fsfp_{subj}_{sess}.py"
     with open(py_script, "w") as ps:
         ps.write(sbatch_cmd)
     h_sp = subprocess.Popen(
@@ -64,12 +60,12 @@ def _schedule_subj(subj_deriv, subj):
     return (h_out, h_err)
 
 
+# %%fnma
 def _get_args():
     """Get and parse arguments."""
     parser = ArgumentParser(
         description=__doc__, formatter_class=RawTextHelpFormatter
     )
-
     parser.add_argument(
         "--proj-dir",
         type=str,
@@ -81,15 +77,15 @@ def _get_args():
             """
         ),
     )
-
-    required_args = parser.add_argument_group("Required Arguments")
-    required_args.add_argument(
+    parser.add_argument(
         "-c",
         "--code-dir",
-        required=True,
+        default="/foo/bar",
         type=str,
         help="Path to clone of this repo",
     )
+
+    required_args = parser.add_argument_group("Required Arguments")
     required_args.add_argument(
         "-s",
         "--sub-list",
@@ -104,33 +100,69 @@ def _get_args():
         required=True,
     )
 
+    if len(sys.argv) == 1:
+        parser.print_help(sys.stderr)
+        sys.exit(1)
 
+    return parser
+
+
+# %%
 def main():
     """Title."""
+    # # For testing
+    # subj_list = ["sub-ER0009"]
+    # code_dir = os.path.dirname(os.path.abspath(__file__))
+    # proj_dir = "/hpc/group/labarlab/EmoRep_BIDS"
+
     args = _get_args().parse_args()
     subj_list = args.sub_list
     code_dir = args.code_dir
     proj_dir = args.proj_dir
 
+    print(subj_list)
+    print(code_dir)
+    print(proj_dir)
+
     # Make variables, lists
     deriv_dir = os.path.join(proj_dir, "derivatives")
-    subj_raw = os.path.join(proj_dir, "rawdata", subj)
-    sess_list = [x for x in os.listdir(subj_raw) if "ses*" in x]
+    print(deriv_dir)
+
+    # Get environmental vars
+    sing_fmriprep = os.environ["sing_fmriprep"]
+    sing_tf = os.environ["SINGULARITYENV_TEMPLATEFLOW_HOME"]
+    user_name = os.environ["USER"]
+    proj_name = os.path.basename(proj_dir)
+    work_dir = os.path.join("/work", user_name, proj_name, "derivatives")
+    log_dir = os.path.join(work_dir, "logs")
+    for h_dir in [work_dir, log_dir]:
+        if not os.path.exists(h_dir):
+            os.makedirs(h_dir)
+
+    print(sing_fmriprep)
+    print(sing_tf)
+    print(user_name)
+    print(proj_name)
+    print(work_dir)
 
     for subj in subj_list:
+        print(subj)
+        subj_raw = os.path.join(proj_dir, "rawdata", subj)
+        sess_list = [x for x in os.listdir(subj_raw) if fnmatch(x, "ses-*")]
+        print(subj_raw)
+        print(sess_list)
         for sess in sess_list:
-            subj_t1 = glob.glob(f"{sess}/anat/*_T1w.nii.gz")
-            subj_deriv = os.path.join(deriv_dir, "freesurfer", subj, sess)
-            if not os.path.exists(subj_deriv):
-                os.makedirs(subj_deriv)
+            subj_t1 = glob.glob(f"{subj_raw}/{sess}/anat/*_T1w.nii.gz")[0]
+            print(subj_t1)
+            _schedule_subj(work_dir, subj, sess, subj_t1)
 
 
 if __name__ == "__main__":
 
     # Require proj env
-    env_foud = [x for x in sys.path if "emorep" in x]
+    env_found = [x for x in sys.path if "emorep" in x]
     if not env_found:
-        print("\nERROR: missing required project environment 'emorep'")
-        print("\tHint: $ labar_env emorep\n")
+        print("\nERROR: missing required project environment 'emorep'.")
+        print("\tHint: $labar_env emorep\n")
         sys.exit(1)
     main()
