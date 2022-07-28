@@ -12,12 +12,13 @@ import sys
 import glob
 import textwrap
 import subprocess
+from datetime import datetime
 from fnmatch import fnmatch
 from argparse import ArgumentParser, RawTextHelpFormatter
 
 
 # %%
-def _schedule_subj(work_dir, subj, sess, subj_t1):
+def _schedule_subj(work_dir, subj, sess, subj_t1, log_dir):
     """Title.
 
     Desc.
@@ -26,7 +27,7 @@ def _schedule_subj(work_dir, subj, sess, subj_t1):
         #!/bin/env {sys.executable}
 
         #SBATCH --job-name=p{subj[4:]}{sess[4:]}
-        #SBATCH --output={work_dir}/logs/p{subj[4:]}-{sess[4:]}.txt
+        #SBATCH --output={log_dir}/p{subj[4:]}-{sess[4:]}.txt
         #SBATCH --time=00:10:00
         #SBATCH --mem=4000
 
@@ -41,8 +42,10 @@ def _schedule_subj(work_dir, subj, sess, subj_t1):
 
         fs_exists = preprocess.freesurfer(
             work_fs,
-            {subj_t1},
-            {subj},
+            "{subj_t1}",
+            "{subj}",
+            "{sess}",
+            "{log_dir}",
         )
         if not fs_exists:
             raise FileNotFoundError
@@ -77,13 +80,6 @@ def _get_args():
             """
         ),
     )
-    parser.add_argument(
-        "-c",
-        "--code-dir",
-        default="/foo/bar",
-        type=str,
-        help="Path to clone of this repo",
-    )
 
     required_args = parser.add_argument_group("Required Arguments")
     required_args.add_argument(
@@ -112,49 +108,52 @@ def main():
     """Title."""
     # # For testing
     # subj_list = ["sub-ER0009"]
-    # code_dir = os.path.dirname(os.path.abspath(__file__))
     # proj_dir = "/hpc/group/labarlab/EmoRep_BIDS"
 
     args = _get_args().parse_args()
     subj_list = args.sub_list
-    code_dir = args.code_dir
     proj_dir = args.proj_dir
 
-    print(subj_list)
-    print(code_dir)
-    print(proj_dir)
+    # print(subj_list)
+    # print(code_dir)
+    # print(proj_dir)
 
     # Make variables, lists
     deriv_dir = os.path.join(proj_dir, "derivatives")
-    print(deriv_dir)
+    # print(deriv_dir)
 
     # Get environmental vars
     sing_fmriprep = os.environ["sing_fmriprep"]
     sing_tf = os.environ["SINGULARITYENV_TEMPLATEFLOW_HOME"]
     user_name = os.environ["USER"]
+
+    # Setup
     proj_name = os.path.basename(proj_dir)
     work_dir = os.path.join("/work", user_name, proj_name, "derivatives")
-    log_dir = os.path.join(work_dir, "logs")
+    now_time = datetime.now()
+    log_dir = os.path.join(
+        work_dir, f"logs/func_pp_{now_time.strftime('%y-%m-%d_%H:%M')}"
+    )
     for h_dir in [work_dir, log_dir]:
         if not os.path.exists(h_dir):
             os.makedirs(h_dir)
 
-    print(sing_fmriprep)
-    print(sing_tf)
-    print(user_name)
-    print(proj_name)
-    print(work_dir)
+    # print(sing_fmriprep)
+    # print(sing_tf)
+    # print(user_name)
+    # print(proj_name)
+    # print(work_dir)
 
     for subj in subj_list:
-        print(subj)
+        # print(subj)
         subj_raw = os.path.join(proj_dir, "rawdata", subj)
         sess_list = [x for x in os.listdir(subj_raw) if fnmatch(x, "ses-*")]
-        print(subj_raw)
-        print(sess_list)
+        # print(subj_raw)
+        # print(sess_list)
         for sess in sess_list:
             subj_t1 = glob.glob(f"{subj_raw}/{sess}/anat/*_T1w.nii.gz")[0]
-            print(subj_t1)
-            _schedule_subj(work_dir, subj, sess, subj_t1)
+            # print(subj_t1)
+            _schedule_subj(work_dir, subj, sess, subj_t1, log_dir)
 
 
 if __name__ == "__main__":

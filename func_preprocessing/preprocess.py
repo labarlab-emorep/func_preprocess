@@ -2,28 +2,27 @@
 
 Desc.
 """
-import os
+import glob
 from func_preprocessing import submit
 
 
-def freesurfer(work_fs, subj_t1, subj):
+def freesurfer(work_fs, subj_t1, subj, sess, log_dir):
     """Title.
 
     Desc.
     """
     bash_cmd = f"""
         mri_convert {subj_t1} {work_fs}/{subj}/mri/orig/001.mgz
-        # recon-all \
-        #     -subjid {subj} \
-        #     -all \
-        #     -sd {work_fs} \
-        #     -parallel \
-        #     -openmp 6
+        recon-all \
+            -subjid {subj} \
+            -all \
+            -sd {work_fs} \
+            -parallel \
+            -openmp 6
     """
-    print(f"Starting FreeSurfer for {subj}:\n\t{bash_cmd}")
-    log_dir = os.path.join(os.path.dirname(work_fs), "logs")
+    print(f"Starting FreeSurfer for {subj}:\n\t{bash_cmd}\n")
     _, _ = submit.sbatch(
-        bash_cmd, f"fs{subj[4:]}{sess[4:]}", log_dir, num_cpus=6, num_hours=10
+        bash_cmd, f"{subj[4:]}{sess[4:]}fs", log_dir, num_cpus=6, num_hours=10
     )
 
     # TODO update fs_files to find something useful
