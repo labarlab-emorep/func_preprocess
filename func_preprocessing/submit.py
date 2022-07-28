@@ -1,7 +1,4 @@
-"""Title.
-
-Desc.
-"""
+"""Functions for controlling sbatch and subprocess submissions."""
 import subprocess
 
 
@@ -14,9 +11,31 @@ def sbatch(
     mem_gig=4,
     env_input=None,
 ):
-    """Title.
+    """Schedule child SBATCH job.
 
-    Desc.
+    Parameters
+    ----------
+    bash_cmd : str
+        Bash syntax, work to schedule
+    job_name : str
+        Name for scheduler
+    log_dir : Path
+        Location of output dir for writing logs
+    num_hours : int
+        Walltime to schedule
+    num_cpus : int
+        Number of CPUs required by job
+    mem_gig : int
+        Job RAM requirement for each CPU (GB)
+    env_input : dict, None
+        Extra environmental variables required by processes
+        e.g. singularity reqs
+
+    Returns
+    -------
+    tuple
+        [0] = stdout of subprocess
+        [1] = stderr of subprocess
     """
     sbatch_cmd = f"""
         sbatch \

@@ -19,16 +19,39 @@ from argparse import ArgumentParser, RawTextHelpFormatter
 
 # %%
 def _schedule_subj(work_dir, subj, sess, subj_t1, log_dir):
-    """Title.
+    """Write and schedule pipeline.
 
-    Desc.
+    Generate a python script that controls preprocessing. Submit
+    the work on schedule resources.
+
+    Currently controls FreeSurfer, fMRIPrep and other preprocessing
+    steps to follow (Jul 28, 2022).
+
+    Parameters
+    ----------
+    work_dir : Path
+        Location of parent work directory
+    subj : str
+        BIDS subject
+    sess : str
+        BIDS session
+    subj_t1 : Path
+        Location of subject T1w nii
+    log_dir : Path
+        Location of output dir for writing logs
+
+    Returns
+    -------
+    tuple
+        [0] subprocess stdout
+        [1] subprocess stderr
     """
     sbatch_cmd = f"""\
         #!/bin/env {sys.executable}
 
         #SBATCH --job-name=p{subj[4:]}{sess[4:]}
         #SBATCH --output={log_dir}/p{subj[4:]}-{sess[4:]}.txt
-        #SBATCH --time=00:10:00
+        #SBATCH --time=20:00:00
         #SBATCH --mem=4000
 
         import os
@@ -53,7 +76,7 @@ def _schedule_subj(work_dir, subj, sess, subj_t1, log_dir):
         # preprocess.fmriprep()
     """
     sbatch_cmd = textwrap.dedent(sbatch_cmd)
-    py_script = f"{work_dir}/logs/run_fsfp_{subj}_{sess}.py"
+    py_script = f"{log_dir}/run_fsfp_{subj}_{sess}.py"
     with open(py_script, "w") as ps:
         ps.write(sbatch_cmd)
     h_sp = subprocess.Popen(

@@ -1,15 +1,31 @@
-"""Title.
-
-Desc.
-"""
+"""Functions for controlling FreeSurfer and fMRIPrep."""
 import glob
 from func_preprocessing import submit
 
 
 def freesurfer(work_fs, subj_t1, subj, sess, log_dir):
-    """Title.
+    """Submit FreeSurfer for subject's session.
 
-    Desc.
+    Convert T1w NIfTI into Analyze format with FreeSurfer
+    directory organization. Run FreeSurfer.
+
+    Parameters
+    ----------
+    work_fs : Path
+        Location of freesurfer derivative directory
+    subj_t1 : Path
+        Location, file of rawdata T1w nii
+    subj : str
+        BIDS subject
+    sess : str
+        BIDS session
+    log_dir : Path
+        Location of output directory for writing logs
+
+    Returns
+    -------
+    bool
+        Whether FreeSurfer derivatives exist
     """
     bash_cmd = f"""
         mri_convert {subj_t1} {work_fs}/{subj}/mri/orig/001.mgz
