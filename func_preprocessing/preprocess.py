@@ -27,29 +27,57 @@ def freesurfer(work_fs, subj_t1, subj, sess, log_dir):
     bool
         Whether FreeSurfer derivatives exist
     """
-    bash_cmd = f"""
-        mri_convert {subj_t1} {work_fs}/{subj}/mri/orig/001.mgz
-        recon-all \
-            -subjid {subj} \
-            -all \
-            -sd {work_fs} \
-            -parallel \
-            -openmp 6
-    """
-    print(f"Starting FreeSurfer for {subj}:\n\t{bash_cmd}\n")
-    _, _ = submit.sbatch(
-        bash_cmd, f"{subj[4:]}{sess[4:]}fs", log_dir, num_cpus=6, num_hours=10
-    )
+    fs_files = glob.glob(f"{work_fs}/**/aparc.a2009s+aseg.mgz", recursive=True)
+    if not fs_files:
+        bash_cmd = f"""
+            mri_convert {subj_t1} {work_fs}/{subj}/mri/orig/001.mgz
+            recon-all \
+                -subjid {subj} \
+                -all \
+                -sd {work_fs} \
+                -parallel \
+                -openmp 6
+        """
+        print(f"Starting FreeSurfer for {subj}:\n\t{bash_cmd}\n")
+        _, _ = submit.sbatch(
+            bash_cmd,
+            f"{subj[4:]}{sess[4:]}fs",
+            log_dir,
+            num_cpus=6,
+            num_hours=10,
+        )
 
-    # TODO update fs_files to find something useful
-    fs_files = glob.glob(f"{work_fs}/**/001.mgz", recursive=True)
+    fs_files = glob.glob(f"{work_fs}/**/aparc.a2009s+aseg.mgz", recursive=True)
     fs_exists = True if fs_files else False
     return fs_exists
 
 
-def fmriprep():
+def fmriprep(
+    subj, subj_sess_raw, work_fp, work_temp, work_fs, sing_fmriprep, sing_tf, fs_license
+):
     """Title.
 
     Desc.
     """
-    pass
+    subj_num = subj[4:]
+    bash_cmd = f"""
+        singularity run --cleanenv \
+        --bind {subj_sess_raw}:/data \
+        --bind {work_fp}:/out \
+        {sing_fmriprep} \
+        /data \
+        /out \
+        participant \
+        --work-dir {work_temp} \
+        --participant-label {subj_num} \
+        --skull-strip-template MNI152NLin2009cAsym \
+        --output-spaces MNI152NLin2009cAsym:res-2 \
+        --fs-license {fs_license} \
+        --fs-subjects-dir {work_fs} \
+        --use-aroma \
+        --skip-bids-validation \
+        --bids-database-dir {} \
+        --nthreads 6 \
+        --omp-nthreads 6 \
+        --stop-on-first-crash
+    """

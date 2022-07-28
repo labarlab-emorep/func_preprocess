@@ -58,6 +58,7 @@ def _schedule_subj(work_dir, subj, sess, subj_t1, log_dir):
         import sys
         from func_preprocessing import preprocess
 
+        # Run FreeSurfer
         work_fs = "{work_dir}/freesurfer_{sess[4:]}"
         work_orig = os.path.join(work_fs, "{subj}/mri/orig")
         if not os.path.exists(work_orig):
@@ -73,6 +74,11 @@ def _schedule_subj(work_dir, subj, sess, subj_t1, log_dir):
         if not fs_exists:
             raise FileNotFoundError
 
+        # Run fMRIPrep
+        work_fp = "{work_dir}/fmriprep"
+        work_temp = os.path.join(work_fp, "temp_work")
+        if not os.path.exists(work_temp):
+            os.makedirs(work_temp)
         # preprocess.fmriprep()
     """
     sbatch_cmd = textwrap.dedent(sbatch_cmd)
@@ -149,6 +155,7 @@ def main():
     sing_fmriprep = os.environ["sing_fmriprep"]
     sing_tf = os.environ["SINGULARITYENV_TEMPLATEFLOW_HOME"]
     user_name = os.environ["USER"]
+    fs_license = os.environ["fs_license"]
 
     # Setup
     proj_name = os.path.basename(proj_dir)

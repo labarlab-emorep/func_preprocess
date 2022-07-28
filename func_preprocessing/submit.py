@@ -49,7 +49,9 @@ def sbatch(
         --wrap="{bash_cmd}"
     """
     print(f"Submitting SBATCH job:\n\t{sbatch_cmd}\n")
-    h_sp = subprocess.Popen(sbatch_cmd, shell=True, stdout=subprocess.PIPE)
+    h_sp = subprocess.Popen(
+        sbatch_cmd, shell=True, stdout=subprocess.PIPE, env=env_input
+    )
     h_out, h_err = h_sp.communicate()
     h_sp.wait()
     return (h_out, h_err)
