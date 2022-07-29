@@ -18,7 +18,16 @@ from argparse import ArgumentParser, RawTextHelpFormatter
 
 
 # %%
-def _schedule_subj(work_dir, subj, sess, subj_t1, log_dir):
+def _schedule_subj(
+    subj,
+    subj_raw,
+    work_fp,
+    work_fs,
+    sing_fmriprep,
+    sing_tf,
+    fs_license,
+    log_dir,
+):
     """Write and schedule pipeline.
 
     Generate a python script that controls preprocessing. Submit
@@ -29,16 +38,7 @@ def _schedule_subj(work_dir, subj, sess, subj_t1, log_dir):
 
     Parameters
     ----------
-    work_dir : Path
-        Location of parent work directory
-    subj : str
-        BIDS subject
-    sess : str
-        BIDS session
-    subj_t1 : Path
-        Location of subject T1w nii
-    log_dir : Path
-        Location of output dir for writing logs
+
 
     Returns
     -------
@@ -49,8 +49,8 @@ def _schedule_subj(work_dir, subj, sess, subj_t1, log_dir):
     sbatch_cmd = f"""\
         #!/bin/env {sys.executable}
 
-        #SBATCH --job-name=p{subj[4:]}{sess[4:]}
-        #SBATCH --output={log_dir}/p{subj[4:]}-{sess[4:]}.txt
+        #SBATCH --job-name=p{subj[4:]}
+        #SBATCH --output={log_dir}/p{subj[4:]}.txt
         #SBATCH --time=20:00:00
         #SBATCH --mem=4000
 
@@ -58,31 +58,36 @@ def _schedule_subj(work_dir, subj, sess, subj_t1, log_dir):
         import sys
         from func_preprocessing import preprocess
 
-        # Run FreeSurfer
-        work_fs = "{work_dir}/freesurfer_{sess[4:]}"
-        work_orig = os.path.join(work_fs, "{subj}/mri/orig")
-        if not os.path.exists(work_orig):
-            os.makedirs(work_orig)
+        # # Run FreeSurfer
+        # work_fs = "work_dir/freesurfer_sess[4:]"
+        # work_orig = os.path.join(work_fs, "{subj}/mri/orig")
+        # if not os.path.exists(work_orig):
+        #     os.makedirs(work_orig)
 
-        fs_exists = preprocess.freesurfer(
-            work_fs,
-            "{subj_t1}",
-            "{subj}",
-            "{sess}",
-            "{log_dir}",
-        )
-        if not fs_exists:
-            raise FileNotFoundError
+        # fs_exists = preprocess.freesurfer(
+        #     work_fs,
+        #     "subj_t1",
+        #     "{subj}",
+        #     "sess",
+        #     "{log_dir}",
+        # )
+        # if not fs_exists:
+        #     raise FileNotFoundError
 
         # Run fMRIPrep
-        work_fp = "{work_dir}/fmriprep"
-        work_temp = os.path.join(work_fp, "temp_work")
-        if not os.path.exists(work_temp):
-            os.makedirs(work_temp)
-        # preprocess.fmriprep()
+        preprocess.fmriprep(
+            "{subj}",
+            "{subj_raw}",
+            "{work_fp}",
+            "{work_fs}",
+            "{sing_fmriprep}",
+            "{sing_tf}",
+            "{fs_license}",
+            "{log_dir}",
+        )
     """
     sbatch_cmd = textwrap.dedent(sbatch_cmd)
-    py_script = f"{log_dir}/run_fsfp_{subj}_{sess}.py"
+    py_script = f"{log_dir}/run_fmriprep_{subj}.py"
     with open(py_script, "w") as ps:
         ps.write(sbatch_cmd)
     h_sp = subprocess.Popen(
@@ -135,55 +140,49 @@ def _get_args():
 # %%
 def main():
     """Title."""
-    # # For testing
-    # subj_list = ["sub-ER0009"]
-    # proj_dir = "/hpc/group/labarlab/EmoRep_BIDS"
-
     args = _get_args().parse_args()
     subj_list = args.sub_list
     proj_dir = args.proj_dir
 
-    # print(subj_list)
-    # print(code_dir)
-    # print(proj_dir)
-
     # Make variables, lists
     deriv_dir = os.path.join(proj_dir, "derivatives")
-    # print(deriv_dir)
 
     # Get environmental vars
     sing_fmriprep = os.environ["sing_fmriprep"]
     sing_tf = os.environ["SINGULARITYENV_TEMPLATEFLOW_HOME"]
     user_name = os.environ["USER"]
-    fs_license = os.environ["fs_license"]
+    fs_license = os.environ["FS_LICENSE"]
 
-    # Setup
+    # Setup working, log directories
     proj_name = os.path.basename(proj_dir)
     work_dir = os.path.join("/work", user_name, proj_name, "derivatives")
+    work_fs = os.path.join(work_dir, "freesurfer")
+    work_fp = os.path.join(work_dir, "fmriprep")
     now_time = datetime.now()
     log_dir = os.path.join(
         work_dir, f"logs/func_pp_{now_time.strftime('%y-%m-%d_%H:%M')}"
     )
-    for h_dir in [work_dir, log_dir]:
+    for h_dir in [work_fs, log_dir]:
         if not os.path.exists(h_dir):
             os.makedirs(h_dir)
 
-    # print(sing_fmriprep)
-    # print(sing_tf)
-    # print(user_name)
-    # print(proj_name)
-    # print(work_dir)
-
+    # Submit jobs for subj_list
     for subj in subj_list:
-        # print(subj)
         subj_raw = os.path.join(proj_dir, "rawdata", subj)
-        sess_list = [x for x in os.listdir(subj_raw) if fnmatch(x, "ses-*")]
-        # print(subj_raw)
-        # print(sess_list)
-        for sess in sess_list:
-            subj_t1 = glob.glob(f"{subj_raw}/{sess}/anat/*_T1w.nii.gz")[0]
-            # print(subj_t1)
-            _schedule_subj(work_dir, subj, sess, subj_t1, log_dir)
+        _schedule_subj(
+            subj,
+            subj_raw,
+            work_fp,
+            work_fs,
+            sing_fmriprep,
+            sing_tf,
+            fs_license,
+            log_dir,
+        )
+        # sess_list = [x for x in os.listdir(subj_raw) if fnmatch(x, "ses-*")]
+        # for sess in sess_list:
+        #     subj_t1 = glob.glob(f"{subj_raw}/{sess}/anat/*_T1w.nii.gz")[0]
+        #     _schedule_subj(work_dir, subj, sess, subj_t1, log_dir)
 
 
 if __name__ == "__main__":

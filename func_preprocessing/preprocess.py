@@ -1,4 +1,5 @@
 """Functions for controlling FreeSurfer and fMRIPrep."""
+import os
 import glob
 from func_preprocessing import submit
 
@@ -53,31 +54,51 @@ def freesurfer(work_fs, subj_t1, subj, sess, log_dir):
 
 
 def fmriprep(
-    subj, subj_sess_raw, work_fp, work_temp, work_fs, sing_fmriprep, sing_tf, fs_license
+    subj,
+    subj_raw,
+    work_fp,
+    work_fs,
+    sing_fmriprep,
+    sing_tf,
+    fs_license,
+    log_dir,
 ):
     """Title.
 
     Desc.
     """
     subj_num = subj[4:]
+    work_par = os.path.dirname(work_fp)
+    work_fp_tmp = os.path.join(work_fp, "tmp_work", subj)
+    work_fp_bids = os.path.join(work_fp_tmp, "bids_layout")
+    if not os.path.exists(work_fp_bids):
+        os.makedirs(work_fp_bids)
+
     bash_cmd = f"""
-        singularity run --cleanenv \
-        --bind {subj_sess_raw}:/data \
-        --bind {work_fp}:/out \
-        {sing_fmriprep} \
-        /data \
-        /out \
-        participant \
-        --work-dir {work_temp} \
-        --participant-label {subj_num} \
-        --skull-strip-template MNI152NLin2009cAsym \
-        --output-spaces MNI152NLin2009cAsym:res-2 \
-        --fs-license {fs_license} \
-        --fs-subjects-dir {work_fs} \
-        --use-aroma \
-        --skip-bids-validation \
-        --bids-database-dir {} \
-        --nthreads 6 \
-        --omp-nthreads 6 \
+        singularity run --home $HOME --cleanenv \\
+        --bind {subj_raw}:/data \\
+        --bind {work_par}:/out \\
+        {sing_fmriprep} \\
+        /data \\
+        /out \\
+        participant \\
+        --work-dir {work_fp_tmp} \\
+        --participant-label {subj_num} \\
+        --skull-strip-template MNI152NLin2009cAsym \\
+        --output-spaces MNI152NLin2009cAsym:res-2 \\
+        --fs-license {fs_license} \\
+        --fs-subjects-dir {work_fs} \\
+        --use-aroma \\
+        --skip-bids-validation \\
+        --bids-database-dir {work_fp_bids} \\
+        --nthreads 10 \\
+        --omp-nthreads 10 \\
         --stop-on-first-crash
     """
+    _, _ = submit.sbatch(
+        bash_cmd,
+        f"{subj[4:]}fp",
+        log_dir,
+        num_cpus=10,
+        num_hours=20,
+    )
