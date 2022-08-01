@@ -62,10 +62,15 @@ def fmriprep(
     sing_tf,
     fs_license,
     log_dir,
+    proj_home,
+    proj_work,
 ):
     """Title.
 
     Desc.
+
+    Parameters
+    ----------
     """
     subj_num = subj[4:]
     work_par = os.path.dirname(work_fp)
@@ -75,7 +80,10 @@ def fmriprep(
         os.makedirs(work_fp_bids)
 
     bash_cmd = f"""
-        singularity run --home $HOME --cleanenv \\
+        singularity run \\
+        --cleanenv \\
+        --bind {proj_home}:{proj_home} \\
+        --bind {proj_work}:{proj_work} \\
         --bind {subj_raw}:/data \\
         --bind {work_par}:/out \\
         {sing_fmriprep} \\
@@ -96,9 +104,5 @@ def fmriprep(
         --stop-on-first-crash
     """
     _, _ = submit.sbatch(
-        bash_cmd,
-        f"{subj[4:]}fp",
-        log_dir,
-        num_cpus=10,
-        num_hours=20,
+        bash_cmd, f"{subj[4:]}fp", log_dir, num_cpus=10, num_hours=20
     )

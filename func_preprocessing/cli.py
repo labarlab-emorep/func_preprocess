@@ -27,6 +27,8 @@ def _schedule_subj(
     sing_tf,
     fs_license,
     log_dir,
+    proj_home,
+    proj_work,
 ):
     """Write and schedule pipeline.
 
@@ -46,6 +48,7 @@ def _schedule_subj(
         [0] subprocess stdout
         [1] subprocess stderr
     """
+    raw_path = os.path.dirname(subj_raw)
     sbatch_cmd = f"""\
         #!/bin/env {sys.executable}
 
@@ -77,13 +80,15 @@ def _schedule_subj(
         # Run fMRIPrep
         preprocess.fmriprep(
             "{subj}",
-            "{subj_raw}",
+            "{raw_path}",
             "{work_fp}",
             "{work_fs}",
             "{sing_fmriprep}",
             "{sing_tf}",
             "{fs_license}",
             "{log_dir}",
+            "{proj_home}",
+            "{proj_work}",
         )
     """
     sbatch_cmd = textwrap.dedent(sbatch_cmd)
@@ -91,9 +96,13 @@ def _schedule_subj(
     with open(py_script, "w") as ps:
         ps.write(sbatch_cmd)
     h_sp = subprocess.Popen(
-        f"sbatch {py_script}", shell=True, stdout=subprocess.PIPE
+        f"sbatch {py_script}",
+        shell=True,
+        stdout=subprocess.PIPE,
+        env=os.environ,
     )
     h_out, h_err = h_sp.communicate()
+    print(f"{h_out.decode('utf-8')}\tfor {subj}")
     return (h_out, h_err)
 
 
@@ -140,6 +149,14 @@ def _get_args():
 # %%
 def main():
     """Title."""
+    # # For testing
+    # subj = "sub-ER0009"
+    # proj_dir = "/hpc/group/labarlab/EmoRep_BIDS"
+    # sing_fmriprep = "/hpc/group/labarlab/research_bin/sing_images/fmriprep-22.0.0"
+    # sing_tf = "/hpc/home/nmm51/research_bin/templateflow"
+    # user_name = "nmm51"
+    # fs_license = "/hpc/home/nmm51/research_bin/license.txt"
+
     args = _get_args().parse_args()
     subj_list = args.sub_list
     proj_dir = args.proj_dir
@@ -148,6 +165,8 @@ def main():
     deriv_dir = os.path.join(proj_dir, "derivatives")
 
     # Get environmental vars
+    proj_home = os.environ["PROJ_HOME"]
+    proj_work = os.environ["PROJ_WORK"]
     sing_fmriprep = os.environ["sing_fmriprep"]
     sing_tf = os.environ["SINGULARITYENV_TEMPLATEFLOW_HOME"]
     user_name = os.environ["USER"]
@@ -169,7 +188,7 @@ def main():
     # Submit jobs for subj_list
     for subj in subj_list:
         subj_raw = os.path.join(proj_dir, "rawdata", subj)
-        _schedule_subj(
+        _, _ = _schedule_subj(
             subj,
             subj_raw,
             work_fp,
@@ -178,6 +197,8 @@ def main():
             sing_tf,
             fs_license,
             log_dir,
+            proj_home,
+            proj_work,
         )
         # sess_list = [x for x in os.listdir(subj_raw) if fnmatch(x, "ses-*")]
         # for sess in sess_list:

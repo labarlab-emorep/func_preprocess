@@ -43,8 +43,8 @@ def sbatch(
         -t {num_hours}:00:00 \
         --cpus-per-task={num_cpus} \
         --mem-per-cpu={mem_gig}000 \
-        -o {log_dir}/{job_name}.out \
-        -e {log_dir}/{job_name}.err \
+        -o {log_dir}/out_{job_name}.log \
+        -e {log_dir}/err_{job_name}.log \
         --wait \
         --wrap="{bash_cmd}"
     """
