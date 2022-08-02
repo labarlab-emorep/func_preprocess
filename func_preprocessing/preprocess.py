@@ -55,7 +55,7 @@ def freesurfer(work_fs, subj_t1, subj, sess, log_dir):
 
 def fmriprep(
     subj,
-    subj_raw,
+    proj_raw,
     work_fp,
     work_fs,
     sing_fmriprep,
@@ -73,7 +73,7 @@ def fmriprep(
     ----------
     """
     subj_num = subj[4:]
-    work_par = os.path.dirname(work_fp)
+    work_deriv = os.path.dirname(work_fp)
     work_fp_tmp = os.path.join(work_fp, "tmp_work", subj)
     work_fp_bids = os.path.join(work_fp_tmp, "bids_layout")
     if not os.path.exists(work_fp_bids):
@@ -84,8 +84,8 @@ def fmriprep(
         --cleanenv \\
         --bind {proj_home}:{proj_home} \\
         --bind {proj_work}:{proj_work} \\
-        --bind {subj_raw}:/data \\
-        --bind {work_par}:/out \\
+        --bind {proj_raw}:/data \\
+        --bind {work_deriv}:/out \\
         {sing_fmriprep} \\
         /data \\
         /out \\
@@ -104,5 +104,10 @@ def fmriprep(
         --stop-on-first-crash
     """
     _, _ = submit.sbatch(
-        bash_cmd, f"{subj[4:]}fp", log_dir, num_cpus=10, num_hours=20
+        bash_cmd,
+        f"{subj[4:]}fp",
+        log_dir,
+        mem_gig=10,
+        num_cpus=10,
+        num_hours=20,
     )
