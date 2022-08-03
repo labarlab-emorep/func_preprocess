@@ -1,6 +1,7 @@
 """Functions for controlling FreeSurfer and fMRIPrep."""
 import os
 import glob
+import shutil
 from func_preprocessing import submit
 
 
@@ -72,8 +73,8 @@ def fmriprep(
     Parameters
     ----------
     """
-    subj_num = subj[4:]
-    work_deriv = os.path.dirname(work_fp)
+    # subj_num = subj[4:]
+    # work_deriv = os.path.dirname(work_fp)
     work_fp_tmp = os.path.join(work_fp, "tmp_work", subj)
     work_fp_bids = os.path.join(work_fp_tmp, "bids_layout")
     if not os.path.exists(work_fp_bids):
@@ -85,13 +86,13 @@ def fmriprep(
         --bind {proj_home}:{proj_home} \\
         --bind {proj_work}:{proj_work} \\
         --bind {proj_raw}:/data \\
-        --bind {work_deriv}:/out \\
+        --bind {work_fp}:/out \\
         {sing_fmriprep} \\
         /data \\
         /out \\
         participant \\
         --work-dir {work_fp_tmp} \\
-        --participant-label {subj_num} \\
+        --participant-label {subj[4:]} \\
         --skull-strip-template MNI152NLin2009cAsym \\
         --output-spaces MNI152NLin2009cAsym:res-2 \\
         --fs-license {fs_license} \\
@@ -111,3 +112,9 @@ def fmriprep(
         num_cpus=10,
         num_hours=20,
     )
+
+    # Check for output, clean
+    if not os.path.exists(f"{work_fp}/{subj}.html"):
+        raise FileNotFoundError(f"FMRIPrep output file {subj}.html not found.")
+    shutil.rmtree(work_fp_tmp)
+    return True

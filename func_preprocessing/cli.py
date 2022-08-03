@@ -78,7 +78,7 @@ def _schedule_subj(
         #     raise FileNotFoundError
 
         # Run fMRIPrep
-        preprocess.fmriprep(
+        fp_worked = preprocess.fmriprep(
             "{subj}",
             "{raw_path}",
             "{work_fp}",
@@ -90,6 +90,8 @@ def _schedule_subj(
             "{proj_home}",
             "{proj_work}",
         )
+        if fp_worked:
+            print("Done!")
     """
     sbatch_cmd = textwrap.dedent(sbatch_cmd)
     py_script = f"{log_dir}/run_fmriprep_{subj}.py"
