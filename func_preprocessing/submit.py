@@ -1,5 +1,8 @@
 """Functions for controlling sbatch and subprocess submissions."""
+import os
+import sys
 import subprocess
+import textwrap
 
 
 def sbatch(
@@ -54,4 +57,86 @@ def sbatch(
     )
     h_out, h_err = h_sp.communicate()
     h_sp.wait()
+    return (h_out, h_err)
+
+
+def schedule_subj(
+    subj,
+    raw_dir,
+    work_fp,
+    work_fs,
+    work_fsl,
+    sing_fmriprep,
+    sing_tf,
+    sing_afni,
+    fs_license,
+    log_dir,
+    proj_home,
+    proj_work,
+):
+    """Write and schedule pipeline.
+
+    Generate a python script that controls preprocessing. Submit
+    the work on schedule resources.
+
+    Currently controls FreeSurfer, fMRIPrep and other preprocessing
+    steps to follow (Jul 28, 2022).
+
+    Parameters
+    ----------
+
+
+    Returns
+    -------
+    tuple
+        [0] subprocess stdout
+        [1] subprocess stderr
+    """
+    sbatch_cmd = f"""\
+        #!/bin/env {sys.executable}
+
+        #SBATCH --job-name=p{subj[4:]}
+        #SBATCH --output={log_dir}/p{subj[4:]}.txt
+        #SBATCH --time=20:00:00
+        #SBATCH --mem=4000
+
+        import os
+        import sys
+        from func_preprocessing import preprocess
+
+        # Run fMRIPrep
+        fp_dict = preprocess.fmriprep(
+            "{subj}",
+            "{raw_dir}",
+            "{work_fp}",
+            "{work_fs}",
+            "{sing_fmriprep}",
+            "{sing_tf}",
+            "{fs_license}",
+            "{log_dir}",
+            "{proj_home}",
+            "{proj_work}",
+        )
+
+        # Finish preprocessing with FSL
+        preprocess.fsl_preproc(
+            "{work_fsl}",
+            fp_dict,
+            "{sing_afni}",
+            "{subj}",
+            "{log_dir}",
+        )
+    """
+    sbatch_cmd = textwrap.dedent(sbatch_cmd)
+    py_script = f"{log_dir}/run_fmriprep_{subj}.py"
+    with open(py_script, "w") as ps:
+        ps.write(sbatch_cmd)
+    h_sp = subprocess.Popen(
+        f"sbatch {py_script}",
+        shell=True,
+        stdout=subprocess.PIPE,
+        env=os.environ,
+    )
+    h_out, h_err = h_sp.communicate()
+    print(f"{h_out.decode('utf-8')}\tfor {subj}")
     return (h_out, h_err)
