@@ -61,10 +61,11 @@ def main():
     # # For testing
     # subj = "sub-ER0009"
     # proj_dir = "/hpc/group/labarlab/EmoRep_BIDS"
-    # sing_fmriprep = "/hpc/group/labarlab/research_bin/sing_images/fmriprep-22.0.0"
+    # sing_fmriprep = "/hpc/group/labarlab/research_bin/sing_images/fmriprep-22.0.0.simg"
     # sing_tf = "/hpc/home/nmm51/research_bin/templateflow"
     # user_name = "nmm51"
     # fs_license = "/hpc/home/nmm51/research_bin/license.txt"
+    # sing_afni = "/hpc/group/labarlab/research_bin/sing_images/afni-22.2.04.simg"
 
     # Capture CLI arguments
     args = _get_args().parse_args()

@@ -135,7 +135,6 @@ def schedule_subj(
         f"sbatch {py_script}",
         shell=True,
         stdout=subprocess.PIPE,
-        env=os.environ,
     )
     h_out, h_err = h_sp.communicate()
     print(f"{h_out.decode('utf-8')}\tfor {subj}")

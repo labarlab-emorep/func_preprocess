@@ -1,10 +1,12 @@
 """Functions for controlling FreeSurfer and fMRIPrep."""
+# %%
 import os
 import glob
 import shutil
 from func_preprocessing import submit
 
 
+# %%
 def freesurfer(work_fs, subj_t1, subj, sess, log_dir):
     """Submit FreeSurfer for subject's session.
 
@@ -67,6 +69,7 @@ def fmriprep(
     log_dir,
     proj_home,
     proj_work,
+    fd_spike_thresh=0.3,
 ):
     """Title.
 
@@ -95,11 +98,12 @@ def fmriprep(
             participant \\
             --work-dir {work_fp_tmp} \\
             --participant-label {subj[4:]} \\
-            --skull-strip-template MNI152NLin2009cAsym \\
-            --output-spaces MNI152NLin2009cAsym:res-2 \\
+            --skull-strip-template MNI152NLin6Asym \\
+            --output-spaces MNI152NLin6Asym:res-2 \\
             --fs-license {fs_license} \\
             --fs-subjects-dir {work_fs} \\
             --use-aroma \\
+            --fd-spike-threshold {fd_spike_thresh} \\
             --skip-bids-validation \\
             --bids-database-dir {work_fp_bids} \\
             --nthreads 10 \\
@@ -155,6 +159,7 @@ def fmriprep(
         )
 
 
+# %%
 def _temporal_filt(bold_preproc, out_dir, bold_tfilt, subj, log_dir):
     """Title.
 
@@ -202,7 +207,7 @@ def _apply_mask(
         --cleanenv \\
         --bind {out_dir}:/opt/home \\
         {sing_afni} \\
-        3dcalc \
+        3dcalc \\
             -a {out_dir}/{bold_tfilt} \\
             -b {out_dir}/{bold_mask_name} \\
             -float \\
@@ -211,6 +216,8 @@ def _apply_mask(
 
         rm {out_dir}/{bold_mask_name}
     """
+    print(bash_cmd)
+    # return
     _, _ = submit.sbatch(
         bash_cmd,
         f"{subj[4:]}tm",
@@ -223,6 +230,7 @@ def _apply_mask(
         )
 
 
+# %%
 def fsl_preproc(work_fsl, fp_dict, sing_afni, subj, log_dir):
     """Title.
 
