@@ -71,12 +71,55 @@ def fmriprep(
     proj_work,
     fd_spike_thresh=0.3,
 ):
-    """Title.
+    """Run fMRIPrep for single subject.
 
-    Desc.
+    Conduct FreeSurfer and fMRIPrep routines on a subject's
+    data. References the MNI152NLin6Asym space for AROMA.
 
     Parameters
     ----------
+    subj : str
+        BIDS subject
+    raw_dir : Path
+        Location of project rawdata directory
+    work_fp : Path
+        Output location for fmriprep, e.g.
+        /work/foo/project/derivatives/fmriprep
+    work_fs : Path
+        Output location for fmriprep, e.g.
+        /work/foo/project/derivatives/freesurfer
+    sing_fmriprep : Path, str
+        Location and image of fmriprep singularity file
+    sing_tf : Path
+        Location of templateflow directory, held on the
+        required environmental variable SINGULARITYENV_TEMPLATEFLOW_HOME
+    fs_license : Path, str
+        Location of FreeSurfer license
+    log_dir : Path
+        Location of directory to capture logs
+    proj_home : Path
+        Location of project directory home for storing data, e.g.
+        /hpc/group/labarlab/EmoRep_BIDS
+    proj_work : Path
+        Location of project work diirectory for processing data, e.g.
+        /work/foo/project
+    fd_spike_thresh : float
+        Threshold for framewise displacement
+
+    Returns
+    -------
+    dict
+        {
+            "aroma_bold": ["/paths/to/*run-*desc-smoothAROMAnonaggr_bold.nii.gz"],
+            "mask_bold": ["/paths/to/*run-*desc-brain_mask.nii.gz"],
+        }
+
+    Raises
+    ------
+    FileNotFoundError
+        <subj>.html missing
+        Different lengths of dict["aroma_bold"] and dict["mask_bold"]
+        AROMA or mask files not detected
     """
     work_fp_tmp = os.path.join(work_fp, "tmp_work", subj)
     work_fp_bids = os.path.join(work_fp_tmp, "bids_layout")
@@ -161,9 +204,36 @@ def fmriprep(
 
 # %%
 def _temporal_filt(bold_preproc, out_dir, bold_tfilt, subj, log_dir):
-    """Title.
+    """Temporally filter data with FSL.
 
-    Desc.
+    Filter data for specific subject, session, run.
+
+    Parameters
+    ----------
+    bold_preproc : Path, str
+        Location of fmriprep preprocessed bold file
+    out_dir : Path
+        Location of derivatives, e.g.
+        /work/foo/EmoRep_BIDS/derivatives/fsl/sub/sess/func
+    bold_tfilt : str
+        File name of temporally filtered bold
+    subj : str
+        BIDS subject
+    log_dir : Path
+        Location of directory to capture logs
+
+    Returns
+    -------
+    None
+
+    Raises
+    ------
+    FileNotFoundError
+        If <out_dir>/<bold_tfilt> not detected.
+
+    Notes
+    -----
+    Writes <out_dir>/<bold_tfilt>.
     """
     out_tmean = bold_tfilt.split("desc-")[0] + "desc-tmean_bold.nii.gz"
     bash_cmd = f"""
@@ -195,9 +265,40 @@ def _temporal_filt(bold_preproc, out_dir, bold_tfilt, subj, log_dir):
 def _apply_mask(
     sing_afni, out_dir, masked_file, bold_tfilt, bold_mask, subj, log_dir
 ):
-    """Title.
+    """Mask temporally filtered data.
 
-    Desc.
+    Mask data for specific subject, session, run.
+
+    Parameters
+    ----------
+    sing_afni : Path, str
+        Location, file of afni singularity image
+    out_dir : Path
+        Location of derivatives, e.g.
+        /work/foo/EmoRep_BIDS/derivatives/fsl/sub/sess/func
+    masked_file : str
+        File name of masked bold file
+    bold_tfilt : str
+        File name of temporally filtered bold
+    bold_mask : str
+        File name of run brain mask
+    subj : str
+        BIDS subject
+    log_dir : Path
+        Location of directory to capture logs
+
+    Returns
+    -------
+    None
+
+    Raises
+    ------
+    FileNotFoundError
+        If <out_dir>/<bold_tfilt> not detected.
+
+    Notes
+    -----
+    Writes <out_dir>/<masked_file>.
     """
     bold_mask_name = os.path.basename(bold_mask)
     bash_cmd = f"""
@@ -205,6 +306,7 @@ def _apply_mask(
 
         singularity run \\
         --cleanenv \\
+        --bind {out_dir}:{out_dir} \\
         --bind {out_dir}:/opt/home \\
         {sing_afni} \\
         3dcalc \\
@@ -216,8 +318,6 @@ def _apply_mask(
 
         rm {out_dir}/{bold_mask_name}
     """
-    print(bash_cmd)
-    # return
     _, _ = submit.sbatch(
         bash_cmd,
         f"{subj[4:]}tm",
@@ -232,9 +332,33 @@ def _apply_mask(
 
 # %%
 def fsl_preproc(work_fsl, fp_dict, sing_afni, subj, log_dir):
-    """Title.
+    """Conduct extra preprocessing via FSL and AFNI.
 
-    Desc.
+    Temporally filter BOLD data and then multiply with
+    a run-specific brain mask.
+
+    Parameters
+    ----------
+    work_fsl : Path
+        Location of FSL derivatives, e.g.
+        /work/foo/EmoRep_BIDS/derivatives/fsl
+    fp_dict : dict
+        Returned from preprocessing.fmriprep, contains
+        paths to preprocessed BOLD and mask file.
+    sing_afni : Path, str
+        Location of afni singularity image
+    subj : str
+        BIDS subject
+    log_dir : Path
+        Location of directory to capture logs
+
+    Returns
+    -------
+    None
+
+    Raises
+    ------
+    None
     """
     for bold_preproc, bold_mask in zip(
         fp_dict["aroma_bold"], fp_dict["mask_bold"]
