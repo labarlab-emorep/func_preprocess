@@ -1,14 +1,29 @@
-r"""Title.
+r"""Conduct preprocessing for EmoRep.
 
-Desc.
+Run data through FreeSurfer and fMRIPrep, then conduct temporal
+filtering via FSL and AFNI. Work is conducted in
+"/work/$(whoami)/EmoRep_BIDS/derivatives", and final files are saved
+to "<proj_dir>/derivatives/<fmriprep|fsl>/<subj>".
 
-Example
--------
+For each subject, a parent job "p<subj>" is submitted that controls
+the pipeline. Named subprocess "<subj>foo>" are spawned when
+additional resources are required.
+
+Log files and scripts written to:
+    "/work/$(whoami)/EmoRep_BIDS/derivatives/logs/func_pp_<timestamp>"
+
+Examples
+--------
 func_preprocessing -s sub-ER0009
+
+func_preprocessing \
+    -s sub-ER0009 sub-ER0010 \
+    --proj-dir /hpc/group/labarlab/foo
 """
 # %%
 import os
 import sys
+import time
 import textwrap
 from datetime import datetime
 from argparse import ArgumentParser, RawTextHelpFormatter
@@ -57,69 +72,48 @@ def _get_args():
 
 # %%
 def main():
-    """Title."""
-    # # For testing
-    # subj = "sub-ER0009"
-    # proj_dir = "/hpc/group/labarlab/EmoRep_BIDS"
-    # sing_fmriprep = "/hpc/group/labarlab/research_bin/sing_images/fmriprep-22.0.0.simg"
-    # sing_tf = "/hpc/home/nmm51/research_bin/templateflow"
-    # user_name = "nmm51"
-    # fs_license = "/hpc/home/nmm51/research_bin/license.txt"
-    # sing_afni = "/hpc/group/labarlab/research_bin/sing_images/afni-22.2.04.simg"
+    """Setup working environment."""
 
     # Capture CLI arguments
     args = _get_args().parse_args()
     subj_list = args.sub_list
     proj_dir = args.proj_dir
 
-    # Setup paths to rawdata, derivatives
-    raw_dir = os.path.join(proj_dir, "rawdata")
-    deriv_dir = os.path.join(proj_dir, "derivatives")
-    deriv_fp = os.path.join(deriv_dir, "fmriprep")
-    deriv_fsl = os.path.join(deriv_dir, "fsl")
-    for h_dir in [deriv_fp, deriv_fsl]:
-        if not os.path.exists(h_dir):
-            os.makedirs(h_dir)
+    # Setup group project directory, paths
+    proj_raw = os.path.join(proj_dir, "rawdata")
+    proj_deriv = os.path.join(proj_dir, "derivatives")
 
     # Get environmental vars
-    proj_home = os.environ["PROJ_HOME"]
-    proj_work = os.environ["PROJ_WORK"]
-    sing_afni = os.environ["sing_afni"]
-    sing_fmriprep = os.environ["sing_fmriprep"]
-    sing_tf = os.environ["SINGULARITYENV_TEMPLATEFLOW_HOME"]
+    sing_afni = os.environ["SING_AFNI"]
+    sing_fmriprep = os.environ["SING_FMRIPREP"]
+    tf_dir = os.environ["SINGULARITYENV_TEMPLATEFLOW_HOME"]
     user_name = os.environ["USER"]
     fs_license = os.environ["FS_LICENSE"]
 
-    # Setup paths to /work/user/project
+    # Setup work directory, for intermediates
     proj_name = os.path.basename(proj_dir)
-    work_dir = os.path.join("/work", user_name, proj_name, "derivatives")
-    work_fs = os.path.join(work_dir, "freesurfer")
-    work_fp = os.path.join(work_dir, "fmriprep")
-    work_fsl = os.path.join(work_dir, "fsl")
+    work_deriv = os.path.join("/work", user_name, proj_name, "derivatives")
     now_time = datetime.now()
     log_dir = os.path.join(
-        work_dir, f"logs/func_pp_{now_time.strftime('%y-%m-%d_%H:%M')}"
+        work_deriv, f"logs/func_pp_{now_time.strftime('%y-%m-%d_%H:%M')}"
     )
-    for h_dir in [work_fs, log_dir]:
-        if not os.path.exists(h_dir):
-            os.makedirs(h_dir)
+    if not os.path.exists(log_dir):
+        os.makedirs(log_dir)
 
     # Submit jobs for subj_list
     for subj in subj_list:
         _, _ = submit.schedule_subj(
             subj,
-            raw_dir,
-            work_fp,
-            work_fs,
-            work_fsl,
+            proj_raw,
+            proj_deriv,
+            work_deriv,
             sing_fmriprep,
-            sing_tf,
-            sing_afni,
+            tf_dir,
             fs_license,
+            sing_afni,
             log_dir,
-            proj_home,
-            proj_work,
         )
+        time.sleep(3)
 
 
 if __name__ == "__main__":

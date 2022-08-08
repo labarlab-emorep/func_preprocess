@@ -3,6 +3,8 @@
 import os
 import glob
 import shutil
+import subprocess
+from fnmatch import fnmatch
 from func_preprocessing import submit
 
 
@@ -13,19 +15,19 @@ def freesurfer(work_fs, subj_t1, subj, sess, log_dir):
     Convert T1w NIfTI into Analyze format with FreeSurfer
     directory organization. Run FreeSurfer.
 
-    Deprecated
+    Deprecated.
 
     Parameters
     ----------
-    work_fs : Path
+    work_fs : path
         Location of freesurfer derivative directory
-    subj_t1 : Path
+    subj_t1 : path
         Location, file of rawdata T1w nii
     subj : str
         BIDS subject
     sess : str
         BIDS session
-    log_dir : Path
+    log_dir : path
         Location of output directory for writing logs
 
     Returns
@@ -60,15 +62,12 @@ def freesurfer(work_fs, subj_t1, subj, sess, log_dir):
 
 def fmriprep(
     subj,
-    raw_dir,
-    work_fp,
-    work_fs,
+    proj_raw,
+    work_deriv,
     sing_fmriprep,
     sing_tf,
     fs_license,
     log_dir,
-    proj_home,
-    proj_work,
     fd_spike_thresh=0.3,
 ):
     """Run fMRIPrep for single subject.
@@ -80,39 +79,28 @@ def fmriprep(
     ----------
     subj : str
         BIDS subject
-    raw_dir : Path
+    proj_raw : path
         Location of project rawdata directory
-    work_fp : Path
-        Output location for fmriprep, e.g.
-        /work/foo/project/derivatives/fmriprep
-    work_fs : Path
-        Output location for fmriprep, e.g.
-        /work/foo/project/derivatives/freesurfer
-    sing_fmriprep : Path, str
+    work_deriv : path
+        Output location for pipeline intermediates, e.g.
+        /work/foo/project/derivatives
+    sing_fmriprep : path, str
         Location and image of fmriprep singularity file
-    sing_tf : Path
+    sing_tf : path
         Location of templateflow directory, held on the
         required environmental variable SINGULARITYENV_TEMPLATEFLOW_HOME
-    fs_license : Path, str
+    fs_license : path, str
         Location of FreeSurfer license
-    log_dir : Path
+    log_dir : path
         Location of directory to capture logs
-    proj_home : Path
-        Location of project directory home for storing data, e.g.
-        /hpc/group/labarlab/EmoRep_BIDS
-    proj_work : Path
-        Location of project work diirectory for processing data, e.g.
-        /work/foo/project
     fd_spike_thresh : float
         Threshold for framewise displacement
 
     Returns
     -------
     dict
-        {
-            "aroma_bold": ["/paths/to/*run-*desc-smoothAROMAnonaggr_bold.nii.gz"],
-            "mask_bold": ["/paths/to/*run-*desc-brain_mask.nii.gz"],
-        }
+        "aroma_bold": ["/paths/to/*AROMAnonaggr_bold.nii.gz"]
+        "mask_bold": ["/paths/to/*run-*desc-brain_mask.nii.gz"]
 
     Raises
     ------
@@ -121,19 +109,24 @@ def fmriprep(
         Different lengths of dict["aroma_bold"] and dict["mask_bold"]
         AROMA or mask files not detected
     """
+
+    # Setup fmriprep specific dir/paths
+    work_fs = os.path.join(work_deriv, "freesurfer")
+    work_fp = os.path.join(work_deriv, "fmriprep")
     work_fp_tmp = os.path.join(work_fp, "tmp_work", subj)
     work_fp_bids = os.path.join(work_fp_tmp, "bids_layout")
     if not os.path.exists(work_fp_bids):
         os.makedirs(work_fp_bids)
 
+    # Construct fmriprep call
     check_file = f"{work_fp}/{subj}.html"
     if not os.path.exists(check_file):
         bash_cmd = f"""
             singularity run \\
             --cleanenv \\
-            --bind {proj_home}:{proj_home} \\
-            --bind {proj_work}:{proj_work} \\
-            --bind {raw_dir}:/data \\
+            --bind {proj_raw}:{proj_raw} \\
+            --bind {work_deriv}:{work_deriv} \\
+            --bind {proj_raw}:/data \\
             --bind {work_fp}:/out \\
             {sing_fmriprep} \\
             /data \\
@@ -168,7 +161,7 @@ def fmriprep(
                 f"FMRIPrep output file {subj}.html not found."
             )
 
-    # Clean
+    # Clean fmriprep work, freesurfer
     try:
         shutil.rmtree(work_fp_tmp)
         shutil.rmtree(f"{work_fs}/{subj}")
@@ -189,6 +182,7 @@ def fmriprep(
         )
     )
 
+    # Check lists, return
     if aroma_bold and mask_bold:
         if len(aroma_bold) != len(mask_bold):
             raise FileNotFoundError(
@@ -203,23 +197,23 @@ def fmriprep(
 
 
 # %%
-def _temporal_filt(bold_preproc, out_dir, bold_tfilt, subj, log_dir):
+def _temporal_filt(run_preproc, out_dir, run_tfilt, subj, log_dir):
     """Temporally filter data with FSL.
 
     Filter data for specific subject, session, run.
 
     Parameters
     ----------
-    bold_preproc : Path, str
+    run_preproc : path, str
         Location of fmriprep preprocessed bold file
-    out_dir : Path
+    out_dir : path
         Location of derivatives, e.g.
         /work/foo/EmoRep_BIDS/derivatives/fsl/sub/sess/func
-    bold_tfilt : str
-        File name of temporally filtered bold
+    run_tfilt : str
+        File name of temporally filtered bold, will be made
     subj : str
         BIDS subject
-    log_dir : Path
+    log_dir : path
         Location of directory to capture logs
 
     Returns
@@ -229,24 +223,24 @@ def _temporal_filt(bold_preproc, out_dir, bold_tfilt, subj, log_dir):
     Raises
     ------
     FileNotFoundError
-        If <out_dir>/<bold_tfilt> not detected.
+        If <out_dir>/<run_tfilt> not detected.
 
     Notes
     -----
-    Writes <out_dir>/<bold_tfilt>.
+    Writes <out_dir>/<run_tfilt>.
     """
-    out_tmean = bold_tfilt.split("desc-")[0] + "desc-tmean_bold.nii.gz"
+    run_tmean = run_tfilt.split("desc-")[0] + "desc-tmean_bold.nii.gz"
     bash_cmd = f"""
         fslmaths \
-            {bold_preproc} \
+            {run_preproc} \
             -Tmean \
-            {out_dir}/{out_tmean}
+            {out_dir}/{run_tmean}
 
         fslmaths \
-            {bold_preproc} \
+            {run_preproc} \
             -bptf 25 -1 \
-            -add {out_dir}/{out_tmean} \
-            {out_dir}/{bold_tfilt}
+            -add {out_dir}/{run_tmean} \
+            {out_dir}/{run_tfilt}
     """
     _, _ = submit.sbatch(
         bash_cmd,
@@ -256,35 +250,36 @@ def _temporal_filt(bold_preproc, out_dir, bold_tfilt, subj, log_dir):
     )
 
     # Check for output
-    if not os.path.exists(f"{out_dir}/{bold_tfilt}"):
+    if not os.path.exists(f"{out_dir}/{run_tfilt}"):
         raise FileNotFoundError(
             f"Failed to make temporal filter file for {subj}."
         )
 
 
 def _apply_mask(
-    sing_afni, out_dir, masked_file, bold_tfilt, bold_mask, subj, log_dir
+    sing_afni, out_dir, run_tfilt_masked, run_tfilt, run_mask, subj, log_dir
 ):
-    """Mask temporally filtered data.
+    """Mask temporally filtered data with AFNI.
 
     Mask data for specific subject, session, run.
 
     Parameters
     ----------
-    sing_afni : Path, str
+    sing_afni : path, str
         Location, file of afni singularity image
-    out_dir : Path
+    out_dir : path
         Location of derivatives, e.g.
         /work/foo/EmoRep_BIDS/derivatives/fsl/sub/sess/func
-    masked_file : str
-        File name of masked bold file
-    bold_tfilt : str
+    run_tfilt_masked : str
+        File name of masked, temporally filtered bold,
+        will be made.
+    run_tfilt : str
         File name of temporally filtered bold
-    bold_mask : str
+    run_mask : str
         File name of run brain mask
     subj : str
         BIDS subject
-    log_dir : Path
+    log_dir : path
         Location of directory to capture logs
 
     Returns
@@ -294,15 +289,15 @@ def _apply_mask(
     Raises
     ------
     FileNotFoundError
-        If <out_dir>/<bold_tfilt> not detected.
+        If <out_dir>/<run_tfilt_masked> not detected.
 
     Notes
     -----
-    Writes <out_dir>/<masked_file>.
+    Writes <out_dir>/<run_tfilt_masked>.
     """
-    bold_mask_name = os.path.basename(bold_mask)
+    run_mask_name = os.path.basename(run_mask)
     bash_cmd = f"""
-        cp {bold_mask} {out_dir}/{bold_mask_name}
+        cp {run_mask} {out_dir}/{run_mask_name}
 
         singularity run \\
         --cleanenv \\
@@ -310,13 +305,13 @@ def _apply_mask(
         --bind {out_dir}:/opt/home \\
         {sing_afni} \\
         3dcalc \\
-            -a {out_dir}/{bold_tfilt} \\
-            -b {out_dir}/{bold_mask_name} \\
+            -a {out_dir}/{run_tfilt} \\
+            -b {out_dir}/{run_mask_name} \\
             -float \\
-            -prefix {out_dir}/{masked_file} \\
+            -prefix {out_dir}/{run_tfilt_masked} \\
             -expr 'a*b'
 
-        rm {out_dir}/{bold_mask_name}
+        rm {out_dir}/{run_mask_name}
     """
     _, _ = submit.sbatch(
         bash_cmd,
@@ -324,9 +319,11 @@ def _apply_mask(
         log_dir,
     )
     # Check for output
-    if not os.path.exists(f"{out_dir}/{masked_file}"):
+    if not os.path.exists(f"{out_dir}/{run_tfilt_masked}"):
         raise FileNotFoundError(
             f"Failed to make masked temporal filter file for {subj}."
+            + "Check preprocessing._apply_mask, preprocessing._temporal_filt,"
+            + " or preprocessing.fsl_preproc."
         )
 
 
@@ -339,17 +336,17 @@ def fsl_preproc(work_fsl, fp_dict, sing_afni, subj, log_dir):
 
     Parameters
     ----------
-    work_fsl : Path
+    work_fsl : path
         Location of FSL derivatives, e.g.
         /work/foo/EmoRep_BIDS/derivatives/fsl
     fp_dict : dict
         Returned from preprocessing.fmriprep, contains
-        paths to preprocessed BOLD and mask file.
-    sing_afni : Path, str
+        paths to preprocessed BOLD and mask files.
+    sing_afni : path, str
         Location of afni singularity image
     subj : str
         BIDS subject
-    log_dir : Path
+    log_dir : path
         Location of directory to capture logs
 
     Returns
@@ -358,37 +355,130 @@ def fsl_preproc(work_fsl, fp_dict, sing_afni, subj, log_dir):
 
     Raises
     ------
-    None
+    NameError
+        When preprocess EPI and mask have misaligned runs in dictionary
+    FileNotFoundError
+        When not all bold runs have a corresponding masked temporal filter file
     """
-    for bold_preproc, bold_mask in zip(
-        fp_dict["aroma_bold"], fp_dict["mask_bold"]
-    ):
+    # Unpack dict for readability
+    run_preproc_list = fp_dict["aroma_bold"]
+    run_mask_list = fp_dict["mask_bold"]
+
+    # TODO refactor for job parallelization
+    for run_preproc, run_mask in zip(run_preproc_list, run_mask_list):
+
+        # Check runs are same
+        epi_run_num = run_preproc.split("run-")[1].split("_")[0]
+        mask_run_num = run_mask.split("run-")[1].split("_")[0]
+        if epi_run_num != mask_run_num:
+            raise NameError(
+                "Runs misalgined in dictionary,"
+                + f" for files {run_preproc} and {run_mask}."
+                + " Check preprocessing.fmriprep return."
+            )
 
         # Setup output location
-        sess = "ses-" + bold_preproc.split("ses-")[1].split("/")[0]
+        sess = "ses-" + run_preproc.split("ses-")[1].split("/")[0]
         out_dir = os.path.join(work_fsl, subj, sess, "func")
         if not os.path.exists(out_dir):
             os.makedirs(out_dir)
 
+        # Avoid repeating work
+        run_tfilt_masked = (
+            os.path.basename(run_preproc).split("desc-")[0]
+            + "desc-tfiltMasked_bold.nii.gz"
+        )
+        if os.path.exists(f"{out_dir}/{run_tfilt_masked}"):
+            continue
+
         # Apply temporal filter
-        bold_tfilt = (
-            os.path.basename(bold_preproc).split("desc-")[0]
+        run_tfilt = (
+            os.path.basename(run_preproc).split("desc-")[0]
             + "desc-tfilt_bold.nii.gz"
         )
-        if not os.path.exists(f"{out_dir}/{bold_tfilt}"):
-            _temporal_filt(bold_preproc, out_dir, bold_tfilt, subj, log_dir)
+        if not os.path.exists(f"{out_dir}/{run_tfilt}"):
+            _temporal_filt(run_preproc, out_dir, run_tfilt, subj, log_dir)
 
         # Apply mask
-        masked_file = (
-            bold_tfilt.split("desc-")[0] + "desc-tfiltMasked_bold.nii.gz"
+        _apply_mask(
+            sing_afni,
+            out_dir,
+            run_tfilt_masked,
+            run_tfilt,
+            run_mask,
+            subj,
+            log_dir,
         )
-        if not os.path.exists(f"{out_dir}/{masked_file}"):
-            _apply_mask(
-                sing_afni,
-                out_dir,
-                masked_file,
-                bold_tfilt,
-                bold_mask,
-                subj,
-                log_dir,
-            )
+
+    fsl_files = glob.glob(
+        f"{work_fsl}/{subj}/**/*desc-tfiltMasked_bold.nii.gz", recursive=True
+    )
+    if len(fsl_files) != len(run_preproc_list):
+        raise FileNotFoundError(f"Missing filtered + masked file for {subj}.")
+
+
+def copy_clean(proj_deriv, work_deriv, subj):
+    """Housekeeping for data.
+
+    Delete unneeded files from work_deriv, copy remaining to
+    the proj_deriv location.
+
+    Parameters
+    ----------
+    proj_deriv : path
+        Project derivative location, e.g.
+        /hpc/group/labarlab/EmoRep_BIDS/derivatives
+    work_deirv : path
+        Working derivative location, e.g.
+        /work/foo/EmoRep_BIDS/derivatives
+    subj : str
+        BIDS subject
+    """
+    # Clean FSL files
+    print("\n\tCleaning FSL files ...")
+    work_fsl_subj = os.path.join(work_deriv, "fsl", subj)
+    remove_fsl = [
+        x
+        for x in sorted(
+            glob.glob(f"{work_fsl_subj}/**/*.nii.gz", recursive=True)
+        )
+        if not fnmatch(x, "*desc-tfiltMasked_bold.nii.gz")
+    ]
+    for rm_file in remove_fsl:
+        os.remove(rm_file)
+
+    # Copy remaining FSL files to proj_deriv, use faster bash
+    proj_fsl_subj = os.path.join(proj_deriv, "fsl", subj)
+    cp_cmd = f"cp -r {work_fsl_subj} {proj_fsl_subj}"
+    cp_sp = subprocess.Popen(cp_cmd, shell=True, stdout=subprocess.PIPE)
+    _ = cp_sp.communicate()
+
+    # Clean fMRIprep files
+    print("\n\tCleaning fMRIPrep files ...")
+    work_fp_subj = os.path.join(work_deriv, "fmriprep", subj)
+    remove_fp = glob.glob(
+        f"{work_fp_subj}/**/*desc-smoothAROMAnonaggr_bold.nii.gz",
+        recursive=True,
+    )
+    for rm_file in remove_fp:
+        os.remove(rm_file)
+
+    # Copy fMRIPrep files
+    work_fp = os.path.dirname(work_fp_subj)
+    proj_fp = os.path.join(proj_deriv, "fmriprep")
+    keep_fmriprep = [
+        "desc-aparcaseg_dseg.tsv",
+        "desc-aseg_dseg.tsv",
+        f"{subj}.html",
+    ]
+    for kp_file in keep_fmriprep:
+        shutil.copyfile(f"{work_fp}/{kp_file}", f"{proj_fp}/{kp_file}")
+
+    proj_fp_subj = os.path.join(proj_fp, subj)
+    cp_cmd = f"cp -r {work_fp_subj} {proj_fp_subj}"
+    cp_sp = subprocess.Popen(cp_cmd, shell=True, stdout=subprocess.PIPE)
+    _ = cp_sp.communicate()
+
+    # Turn out the lights
+    shutil.rmtree(work_fp_subj)
+    shutil.rmtree(work_fsl_subj)
