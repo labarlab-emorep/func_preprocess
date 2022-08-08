@@ -71,7 +71,6 @@ def schedule_subj(
     proj_deriv,
     work_deriv,
     sing_fmriprep,
-    tf_dir,
     fs_license,
     sing_afni,
     log_dir,
@@ -96,8 +95,6 @@ def schedule_subj(
         /work/foo/EmoRep_BIDS/derivatives
     sing_fmriprep : path, str
         Location of fmiprep singularity image
-    tf_dir : path
-        Location of templateflow directory
     fs_license : path, str
         Location of FreeSurfer license
     sing_afni : path, str
@@ -145,7 +142,6 @@ def schedule_subj(
             "{proj_raw}",
             "{work_deriv}",
             "{sing_fmriprep}",
-            "{tf_dir}",
             "{fs_license}",
             "{log_dir}",
         )

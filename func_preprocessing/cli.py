@@ -86,7 +86,6 @@ def main():
     # Get environmental vars
     sing_afni = os.environ["SING_AFNI"]
     sing_fmriprep = os.environ["SING_FMRIPREP"]
-    tf_dir = os.environ["SINGULARITYENV_TEMPLATEFLOW_HOME"]
     user_name = os.environ["USER"]
     fs_license = os.environ["FS_LICENSE"]
 
@@ -108,7 +107,6 @@ def main():
             proj_deriv,
             work_deriv,
             sing_fmriprep,
-            tf_dir,
             fs_license,
             sing_afni,
             log_dir,
