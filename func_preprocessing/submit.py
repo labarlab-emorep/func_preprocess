@@ -1,4 +1,4 @@
-"""Functions for controlling sbatch and subprocess submissions."""
+"""Methods for controlling sbatch and subprocess submissions."""
 import os
 import sys
 import subprocess
@@ -39,6 +39,11 @@ def sbatch(
     tuple
         [0] = stdout of subprocess
         [1] = stderr of subprocess
+
+    Notes
+    -----
+    Avoid using double quotes in <bash_cmd> (particularly relevant
+    with AFNI) to avoid conflict with --wrap syntax.
     """
     sbatch_cmd = f"""
         sbatch \
@@ -62,29 +67,38 @@ def sbatch(
 
 def schedule_subj(
     subj,
-    raw_dir,
-    work_fp,
-    work_fs,
-    work_fsl,
+    proj_raw,
+    work_deriv,
     sing_fmriprep,
-    sing_tf,
-    sing_afni,
+    tf_dir,
     fs_license,
+    sing_afni,
     log_dir,
-    proj_home,
-    proj_work,
 ):
     """Write and schedule pipeline.
 
     Generate a python script that controls preprocessing. Submit
     the work on schedule resources.
 
-    Currently controls FreeSurfer, fMRIPrep and other preprocessing
-    steps to follow (Jul 28, 2022).
-
     Parameters
     ----------
-
+    subj : str
+        BIDS subject identifier
+    proj_raw : Path
+        Location of project rawdata
+    work_deriv : path
+        Location of work derivatives, e.g.
+        /work/foo/EmoRep_BIDS/derivatives
+    sing_fmriprep : Path, str
+        Location of fmiprep singularity image
+    tf_dir : Path
+        Location of templateflow directory
+    fs_license : Path, str
+        Location of FreeSurfer license
+    sing_afni : Path, str
+        Location of afni singularity iamge
+    log_dir : Path
+        Location for writing logs
 
     Returns
     -------
@@ -92,6 +106,15 @@ def schedule_subj(
         [0] subprocess stdout
         [1] subprocess stderr
     """
+    # Setup software derivatives directories
+    work_fp = os.path.join(work_deriv, "fmriprep")
+    work_fs = os.path.join(work_deriv, "freesurfer")
+    work_fsl = os.path.join(work_deriv, "fsl")
+    for h_dir in [work_fp, work_fs, work_fsl]:
+        if not os.path.exists(h_dir):
+            os.makedirs(h_dir)
+
+    # Write parent python script
     sbatch_cmd = f"""\
         #!/bin/env {sys.executable}
 
@@ -107,18 +130,15 @@ def schedule_subj(
         # Run fMRIPrep
         fp_dict = preprocess.fmriprep(
             "{subj}",
-            "{raw_dir}",
-            "{work_fp}",
-            "{work_fs}",
+            "{proj_raw}",
+            "{work_deriv}",
             "{sing_fmriprep}",
-            "{sing_tf}",
+            "{tf_dir}",
             "{fs_license}",
             "{log_dir}",
-            "{proj_home}",
-            "{proj_work}",
         )
 
-        # Finish preprocessing with FSL
+        # Finish preprocessing with FSL, AFNI
         preprocess.fsl_preproc(
             "{work_fsl}",
             fp_dict,
@@ -126,6 +146,9 @@ def schedule_subj(
             "{subj}",
             "{log_dir}",
         )
+
+        # Clean up
+
     """
     sbatch_cmd = textwrap.dedent(sbatch_cmd)
     py_script = f"{log_dir}/run_fmriprep_{subj}.py"
