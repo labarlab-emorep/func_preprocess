@@ -1,14 +1,29 @@
-r"""Title.
+r"""Conduct preprocessing for EmoRep.
 
-Desc.
+Run data through FreeSurfer and fMRIPrep, then conduct temporal
+filtering via FSL and AFNI. Work is conducted in
+"/work/$(whoami)/EmoRep_BIDS/derivatives", and final files are saved
+to "<proj_dir>/derivatives/<fmriprep|fsl>/<subj>".
 
-Example
--------
+For each subject, a parent job "p<subj>" is submitted that controls
+the pipeline. Named subprocess "<subj>foo>" are spawned when
+additional resources are required.
+
+Log files and scripts written to:
+    "/work/$(whoami)/EmoRep_BIDS/derivatives/logs/func_pp_<timestamp>"
+
+Examples
+--------
 func_preprocessing -s sub-ER0009
+
+func_preprocessing \
+    -s sub-ER0009 sub-ER0010 \
+    --proj-dir /hpc/group/labarlab/foo
 """
 # %%
 import os
 import sys
+import time
 import textwrap
 from datetime import datetime
 from argparse import ArgumentParser, RawTextHelpFormatter
@@ -67,11 +82,6 @@ def main():
     # Setup group project directory, paths
     proj_raw = os.path.join(proj_dir, "rawdata")
     proj_deriv = os.path.join(proj_dir, "derivatives")
-    proj_deriv_fp = os.path.join(proj_deriv, "fmriprep")
-    proj_deriv_fsl = os.path.join(proj_deriv, "fsl")
-    for h_dir in [proj_deriv_fp, proj_deriv_fsl]:
-        if not os.path.exists(h_dir):
-            os.makedirs(h_dir)
 
     # Get environmental vars
     sing_afni = os.environ["SING_AFNI"]
@@ -95,6 +105,7 @@ def main():
         _, _ = submit.schedule_subj(
             subj,
             proj_raw,
+            proj_deriv,
             work_deriv,
             sing_fmriprep,
             tf_dir,
@@ -102,6 +113,7 @@ def main():
             sing_afni,
             log_dir,
         )
+        time.sleep(3)
 
 
 if __name__ == "__main__":

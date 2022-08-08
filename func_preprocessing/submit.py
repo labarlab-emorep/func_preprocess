@@ -68,6 +68,7 @@ def sbatch(
 def schedule_subj(
     subj,
     proj_raw,
+    proj_deriv,
     work_deriv,
     sing_fmriprep,
     tf_dir,
@@ -84,20 +85,24 @@ def schedule_subj(
     ----------
     subj : str
         BIDS subject identifier
-    proj_raw : Path
-        Location of project rawdata
+    proj_raw : path
+        Location of project rawdata, e.g.
+        /hpc/group/labarlab/EmoRep_BIDS/rawdata
+    proj_deriv : path
+        Location of project derivatives, e.g.
+        /hpc/group/labarlab/EmoRep_BIDS/derivatives
     work_deriv : path
         Location of work derivatives, e.g.
         /work/foo/EmoRep_BIDS/derivatives
-    sing_fmriprep : Path, str
+    sing_fmriprep : path, str
         Location of fmiprep singularity image
-    tf_dir : Path
+    tf_dir : path
         Location of templateflow directory
-    fs_license : Path, str
+    fs_license : path, str
         Location of FreeSurfer license
-    sing_afni : Path, str
+    sing_afni : path, str
         Location of afni singularity iamge
-    log_dir : Path
+    log_dir : path
         Location for writing logs
 
     Returns
@@ -106,11 +111,18 @@ def schedule_subj(
         [0] subprocess stdout
         [1] subprocess stderr
     """
-    # Setup software derivatives directories
+    # Setup software derivatives dirs, for working
     work_fp = os.path.join(work_deriv, "fmriprep")
     work_fs = os.path.join(work_deriv, "freesurfer")
     work_fsl = os.path.join(work_deriv, "fsl")
     for h_dir in [work_fp, work_fs, work_fsl]:
+        if not os.path.exists(h_dir):
+            os.makedirs(h_dir)
+
+    # Setup software derivatives dirs, for storage
+    proj_fp = os.path.join(proj_deriv, "fmriprep")
+    proj_fsl = os.path.join(proj_deriv, "fsl")
+    for h_dir in [proj_fp, proj_fsl]:
         if not os.path.exists(h_dir):
             os.makedirs(h_dir)
 
@@ -148,6 +160,11 @@ def schedule_subj(
         )
 
         # Clean up
+        preprocess.copy_clean(
+            "{proj_deriv}",
+            "{work_deriv}",
+            "{subj}"
+        )
 
     """
     sbatch_cmd = textwrap.dedent(sbatch_cmd)
