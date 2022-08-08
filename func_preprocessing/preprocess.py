@@ -1,4 +1,8 @@
-"""Functions for controlling FreeSurfer and fMRIPrep."""
+"""Preprocessing methods.
+
+FreeSurfer (deprecated), fMRIPrep, FSL, and AFNI
+software used for preprocessing EmoRep data.
+"""
 # %%
 import os
 import glob
