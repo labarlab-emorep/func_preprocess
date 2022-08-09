@@ -14,12 +14,11 @@ Log files and scripts written to:
 
 Examples
 --------
-func_preprocessing -s sub-ER0009
+func_preprocessing -s sub-ER0009 --ignore-fmaps
 
 func_preprocessing \
     -s sub-ER0009 sub-ER0010 \
-    --proj-dir /hpc/group/labarlab/foo \
-    --use-fmap
+    --proj-dir /hpc/group/labarlab/foo
 """
 # %%
 import os
@@ -39,7 +38,6 @@ def _get_args():
     )
     parser.add_argument(
         "--ignore-fmaps",
-        type=str,
         action="store_true",
         help=textwrap.dedent(
             """\

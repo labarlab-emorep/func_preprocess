@@ -140,7 +140,7 @@ def schedule_subj(
 
         import os
         import sys
-        from func_preprocessing import preprocess
+        from func_preprocessing import preprocess, manage_data
 
         # Run fMRIPrep
         fp_dict = preprocess.fmriprep(
@@ -150,7 +150,7 @@ def schedule_subj(
             "{sing_fmriprep}",
             "{fs_license}",
             {fd_thresh},
-            "{ignore_fmaps}",
+            {ignore_fmaps},
             "{log_dir}",
         )
 
@@ -164,7 +164,7 @@ def schedule_subj(
         )
 
         # Clean up
-        preprocess.copy_clean(
+        manage_data.copy_clean(
             "{proj_deriv}",
             "{work_deriv}",
             "{subj}"
