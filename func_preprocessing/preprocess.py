@@ -70,8 +70,9 @@ def fmriprep(
     work_deriv,
     sing_fmriprep,
     fs_license,
+    fd_thresh,
+    ignore_fmaps,
     log_dir,
-    fd_spike_thresh=0.3,
 ):
     """Run fMRIPrep for single subject.
 
@@ -91,10 +92,12 @@ def fmriprep(
         Location and image of fmriprep singularity file
     fs_license : path, str
         Location of FreeSurfer license
+    fd_thresh : float
+        Threshold for framewise displacement
+    ignore_fmaps : bool
+        Whether to incorporate fmaps in preprocessing
     log_dir : path
         Location of directory to capture logs
-    fd_spike_thresh : float
-        Threshold for framewise displacement
 
     Returns
     -------
@@ -142,13 +145,15 @@ def fmriprep(
             --fs-license {fs_license} \\
             --fs-subjects-dir {work_fs} \\
             --use-aroma \\
-            --fd-spike-threshold {fd_spike_thresh} \\
+            --fd-spike-threshold {fd_thresh} \\
             --skip-bids-validation \\
             --bids-database-dir {work_fp_bids} \\
             --nthreads 10 \\
             --omp-nthreads 10 \\
-            --stop-on-first-crash
+            --stop-on-first-crash \\
         """
+        if ignore_fmaps:
+            bash_cmd += " --ignore fieldmaps"
         _, _ = submit.sbatch(
             bash_cmd,
             f"{subj[7:]}_fmriprep",
