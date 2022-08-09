@@ -53,7 +53,7 @@ def freesurfer(work_fs, subj_t1, subj, sess, log_dir):
         print(f"Starting FreeSurfer for {subj}:\n\t{bash_cmd}\n")
         _, _ = submit.sbatch(
             bash_cmd,
-            f"{subj[4:]}{sess[4:]}fs",
+            f"{subj[4:]}{sess[4:]}_freesurfer",
             log_dir,
             num_cpus=6,
             num_hours=10,
@@ -151,7 +151,7 @@ def fmriprep(
         """
         _, _ = submit.sbatch(
             bash_cmd,
-            f"{subj[4:]}fp",
+            f"{subj[7:]}_fmriprep",
             log_dir,
             mem_gig=10,
             num_cpus=10,
@@ -247,7 +247,7 @@ def _temporal_filt(run_preproc, out_dir, run_tfilt, subj, log_dir):
     """
     _, _ = submit.sbatch(
         bash_cmd,
-        f"{subj[4:]}tf",
+        f"{subj[7:]}_tempfilt",
         log_dir,
         mem_gig=6,
     )
@@ -318,7 +318,7 @@ def _apply_mask(
     """
     _, _ = submit.sbatch(
         bash_cmd,
-        f"{subj[4:]}tm",
+        f"{subj[7:]}_tempmask",
         log_dir,
     )
     # Check for output

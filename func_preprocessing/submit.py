@@ -128,8 +128,8 @@ def schedule_subj(
         #!/bin/env {sys.executable}
 
         #SBATCH --job-name=p{subj[4:]}
-        #SBATCH --output={log_dir}/p{subj[4:]}.txt
-        #SBATCH --time=24:00:00
+        #SBATCH --output={log_dir}/par{subj[4:]}.txt
+        #SBATCH --time=30:00:00
         #SBATCH --mem=4000
 
         import os
