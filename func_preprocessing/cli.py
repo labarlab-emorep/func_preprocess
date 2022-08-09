@@ -14,7 +14,7 @@ Log files and scripts written to:
 
 Examples
 --------
-func_preprocessing -s sub-ER0009
+func_preprocessing -s sub-ER0009 --ignore-fmaps
 
 func_preprocessing \
     -s sub-ER0009 sub-ER0010 \
@@ -37,12 +37,33 @@ def _get_args():
         description=__doc__, formatter_class=RawTextHelpFormatter
     )
     parser.add_argument(
+        "--ignore-fmaps",
+        action="store_true",
+        help=textwrap.dedent(
+            """\
+            Whether fmriprep will ignore fmaps,
+            True if "--ignore-fmap" else False.
+            """
+        ),
+    )
+    parser.add_argument(
+        "--fd-thresh",
+        type=float,
+        default=0.3,
+        help=textwrap.dedent(
+            """\
+            Framewise displacement threshold
+            (default : %(default)s)
+            """
+        ),
+    )
+    parser.add_argument(
         "--proj-dir",
         type=str,
         default="/hpc/group/labarlab/EmoRep_BIDS",
         help=textwrap.dedent(
             """\
-            path to BIDS-formatted project directory
+            Path to BIDS-formatted project directory
             (default : %(default)s)
             """
         ),
@@ -78,6 +99,8 @@ def main():
     args = _get_args().parse_args()
     subj_list = args.sub_list
     proj_dir = args.proj_dir
+    ignore_fmaps = args.ignore_fmaps
+    fd_thresh = args.fd_thresh
 
     # Setup group project directory, paths
     proj_raw = os.path.join(proj_dir, "rawdata")
@@ -108,6 +131,8 @@ def main():
             work_deriv,
             sing_fmriprep,
             fs_license,
+            fd_thresh,
+            ignore_fmaps,
             sing_afni,
             log_dir,
         )

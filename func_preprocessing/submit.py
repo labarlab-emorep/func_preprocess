@@ -72,6 +72,8 @@ def schedule_subj(
     work_deriv,
     sing_fmriprep,
     fs_license,
+    fd_thresh,
+    ignore_fmaps,
     sing_afni,
     log_dir,
 ):
@@ -97,6 +99,10 @@ def schedule_subj(
         Location of fmiprep singularity image
     fs_license : path, str
         Location of FreeSurfer license
+    fd_thresh : float
+        Threshold for framewise displacement
+    ignore_fmaps : bool
+        Whether to incorporate fmaps in preprocessing
     sing_afni : path, str
         Location of afni singularity iamge
     log_dir : path
@@ -134,7 +140,7 @@ def schedule_subj(
 
         import os
         import sys
-        from func_preprocessing import preprocess
+        from func_preprocessing import preprocess, manage_data
 
         # Run fMRIPrep
         fp_dict = preprocess.fmriprep(
@@ -143,6 +149,8 @@ def schedule_subj(
             "{work_deriv}",
             "{sing_fmriprep}",
             "{fs_license}",
+            {fd_thresh},
+            {ignore_fmaps},
             "{log_dir}",
         )
 
@@ -156,7 +164,7 @@ def schedule_subj(
         )
 
         # Clean up
-        preprocess.copy_clean(
+        manage_data.copy_clean(
             "{proj_deriv}",
             "{work_deriv}",
             "{subj}"

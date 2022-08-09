@@ -7,8 +7,6 @@ software used for preprocessing EmoRep data.
 import os
 import glob
 import shutil
-import subprocess
-from fnmatch import fnmatch
 from func_preprocessing import submit
 
 
@@ -70,8 +68,9 @@ def fmriprep(
     work_deriv,
     sing_fmriprep,
     fs_license,
+    fd_thresh,
+    ignore_fmaps,
     log_dir,
-    fd_spike_thresh=0.3,
 ):
     """Run fMRIPrep for single subject.
 
@@ -91,10 +90,12 @@ def fmriprep(
         Location and image of fmriprep singularity file
     fs_license : path, str
         Location of FreeSurfer license
+    fd_thresh : float
+        Threshold for framewise displacement
+    ignore_fmaps : bool
+        Whether to incorporate fmaps in preprocessing
     log_dir : path
         Location of directory to capture logs
-    fd_spike_thresh : float
-        Threshold for framewise displacement
 
     Returns
     -------
@@ -142,13 +143,17 @@ def fmriprep(
             --fs-license {fs_license} \\
             --fs-subjects-dir {work_fs} \\
             --use-aroma \\
-            --fd-spike-threshold {fd_spike_thresh} \\
+            --fd-spike-threshold {fd_thresh} \\
             --skip-bids-validation \\
             --bids-database-dir {work_fp_bids} \\
             --nthreads 10 \\
             --omp-nthreads 10 \\
-            --stop-on-first-crash
+            --stop-on-first-crash \\
         """
+
+        # Append fmriprep call, submit
+        if ignore_fmaps:
+            bash_cmd += " --ignore fieldmaps"
         _, _ = submit.sbatch(
             bash_cmd,
             f"{subj[7:]}_fmriprep",
@@ -418,70 +423,3 @@ def fsl_preproc(work_fsl, fp_dict, sing_afni, subj, log_dir):
     )
     if len(fsl_files) != len(run_preproc_list):
         raise FileNotFoundError(f"Missing filtered + masked file for {subj}.")
-
-
-def copy_clean(proj_deriv, work_deriv, subj):
-    """Housekeeping for data.
-
-    Delete unneeded files from work_deriv, copy remaining to
-    the proj_deriv location.
-
-    Parameters
-    ----------
-    proj_deriv : path
-        Project derivative location, e.g.
-        /hpc/group/labarlab/EmoRep_BIDS/derivatives
-    work_deirv : path
-        Working derivative location, e.g.
-        /work/foo/EmoRep_BIDS/derivatives
-    subj : str
-        BIDS subject
-    """
-    # Clean FSL files
-    print("\n\tCleaning FSL files ...")
-    work_fsl_subj = os.path.join(work_deriv, "fsl", subj)
-    remove_fsl = [
-        x
-        for x in sorted(
-            glob.glob(f"{work_fsl_subj}/**/*.nii.gz", recursive=True)
-        )
-        if not fnmatch(x, "*desc-tfiltMasked_bold.nii.gz")
-    ]
-    for rm_file in remove_fsl:
-        os.remove(rm_file)
-
-    # Copy remaining FSL files to proj_deriv, use faster bash
-    proj_fsl_subj = os.path.join(proj_deriv, "fsl", subj)
-    cp_cmd = f"cp -r {work_fsl_subj} {proj_fsl_subj}"
-    cp_sp = subprocess.Popen(cp_cmd, shell=True, stdout=subprocess.PIPE)
-    _ = cp_sp.communicate()
-
-    # Clean fMRIprep files
-    print("\n\tCleaning fMRIPrep files ...")
-    work_fp_subj = os.path.join(work_deriv, "fmriprep", subj)
-    remove_fp = glob.glob(
-        f"{work_fp_subj}/**/*desc-smoothAROMAnonaggr_bold.nii.gz",
-        recursive=True,
-    )
-    for rm_file in remove_fp:
-        os.remove(rm_file)
-
-    # Copy fMRIPrep files
-    work_fp = os.path.dirname(work_fp_subj)
-    proj_fp = os.path.join(proj_deriv, "fmriprep")
-    keep_fmriprep = [
-        "desc-aparcaseg_dseg.tsv",
-        "desc-aseg_dseg.tsv",
-        f"{subj}.html",
-    ]
-    for kp_file in keep_fmriprep:
-        shutil.copyfile(f"{work_fp}/{kp_file}", f"{proj_fp}/{kp_file}")
-
-    proj_fp_subj = os.path.join(proj_fp, subj)
-    cp_cmd = f"cp -r {work_fp_subj} {proj_fp_subj}"
-    cp_sp = subprocess.Popen(cp_cmd, shell=True, stdout=subprocess.PIPE)
-    _ = cp_sp.communicate()
-
-    # Turn out the lights
-    shutil.rmtree(work_fp_subj)
-    shutil.rmtree(work_fsl_subj)
