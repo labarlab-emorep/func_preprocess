@@ -14,7 +14,7 @@ This in-house python package is written for the EmoRep project, intended to be e
 
 ## Notes
 - Data is processed in `/work/<user>/EmoRep/derivatives` and final files are copied to `/hpc/group/labarlab/EmoRep/derivatives`, then housekeeping is conducted in `/work`
-- Run scripts, parent stdout/err, and subprocess stdout/err for each subject are captured in `/work/<user>/EmoRep/derivatives/logs/func_pp_<timestamp>`
+- Run scripts (run_fmirprep_sub-ER0009.py), parent stdout/err (par009.txt), and subprocess stdout/err (out/err_009_<job_name>.log) for each subject are captured in `/work/<user>/EmoRep/derivatives/logs/func_pp_<timestamp>`
 
 ## Documentation
 _TODO: take readthedocs live_
