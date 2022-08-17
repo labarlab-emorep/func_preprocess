@@ -10,7 +10,7 @@ def sbatch(
     job_name,
     log_dir,
     num_hours=1,
-    num_cpus=4,
+    num_cpus=1,
     mem_gig=4,
     env_input=None,
 ):
