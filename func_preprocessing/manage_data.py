@@ -26,12 +26,11 @@ def copy_clean(proj_deriv, work_deriv, subj):
     # Clean FSL files
     print("\n\tCleaning FSL files ...")
     work_fsl_subj = os.path.join(work_deriv, "fsl", subj)
+    nii_list = sorted(
+        glob.glob(f"{work_fsl_subj}/**/*.nii.gz", recursive=True)
+    )
     remove_fsl = [
-        x
-        for x in sorted(
-            glob.glob(f"{work_fsl_subj}/**/*.nii.gz", recursive=True)
-        )
-        if not fnmatch(x, "*desc-tfiltMasked_bold.nii.gz")
+        x for x in nii_list if not fnmatch(x, "*desc-tfiltMasked_bold.nii.gz")
     ]
     for rm_file in remove_fsl:
         os.remove(rm_file)

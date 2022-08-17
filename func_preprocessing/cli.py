@@ -14,11 +14,12 @@ Log files and scripts written to:
 
 Examples
 --------
-func_preprocessing -s sub-ER0009 --ignore-fmaps
+func_preprocessing -s sub-ER0009
 
 func_preprocessing \
     -s sub-ER0009 sub-ER0010 \
-    --proj-dir /hpc/group/labarlab/foo
+    --proj-dir /hpc/group/labarlab/foo \
+    --ignore-fmaps
 """
 # %%
 import os
