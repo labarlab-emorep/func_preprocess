@@ -22,10 +22,11 @@ def copy_clean(proj_deriv, work_deriv, subj):
         /work/foo/EmoRep_BIDS/derivatives
     subj : str
         BIDS subject
+
     """
     # Clean FSL files
     print("\n\tCleaning FSL files ...")
-    work_fsl_subj = os.path.join(work_deriv, "fsl", subj)
+    work_fsl_subj = os.path.join(work_deriv, "fsl_denoise", subj)
     nii_list = sorted(
         glob.glob(f"{work_fsl_subj}/**/*.nii.gz", recursive=True)
     )
@@ -36,7 +37,7 @@ def copy_clean(proj_deriv, work_deriv, subj):
         os.remove(rm_file)
 
     # Copy remaining FSL files to proj_deriv, use faster bash
-    proj_fsl_subj = os.path.join(proj_deriv, "fsl", subj)
+    proj_fsl_subj = os.path.join(proj_deriv, "fsl_denoise", subj)
     cp_cmd = f"cp -r {work_fsl_subj} {proj_fsl_subj}"
     cp_sp = subprocess.Popen(cp_cmd, shell=True, stdout=subprocess.PIPE)
     _ = cp_sp.communicate()
@@ -67,6 +68,6 @@ def copy_clean(proj_deriv, work_deriv, subj):
     cp_sp = subprocess.Popen(cp_cmd, shell=True, stdout=subprocess.PIPE)
     _ = cp_sp.communicate()
 
-    # Turn out the lights
-    shutil.rmtree(work_fp_subj)
-    shutil.rmtree(work_fsl_subj)
+    # # Turn out the lights
+    # shutil.rmtree(work_fp_subj)
+    # shutil.rmtree(work_fsl_subj)

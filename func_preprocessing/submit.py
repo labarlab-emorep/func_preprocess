@@ -44,6 +44,7 @@ def sbatch(
     -----
     Avoid using double quotes in <bash_cmd> (particularly relevant
     with AFNI) to avoid conflict with --wrap syntax.
+
     """
     sbatch_cmd = f"""
         sbatch \
@@ -113,18 +114,19 @@ def schedule_subj(
     tuple
         [0] subprocess stdout
         [1] subprocess stderr
+
     """
     # Setup software derivatives dirs, for working
     work_fp = os.path.join(work_deriv, "fmriprep")
     work_fs = os.path.join(work_deriv, "freesurfer")
-    work_fsl = os.path.join(work_deriv, "fsl")
+    work_fsl = os.path.join(work_deriv, "fsl_denoise")
     for h_dir in [work_fp, work_fs, work_fsl]:
         if not os.path.exists(h_dir):
             os.makedirs(h_dir)
 
     # Setup software derivatives dirs, for storage
-    proj_fp = os.path.join(proj_deriv, "fmriprep")
-    proj_fsl = os.path.join(proj_deriv, "fsl")
+    proj_fp = os.path.join(proj_deriv, "pre_processing/fmriprep")
+    proj_fsl = os.path.join(proj_deriv, "pre_processing/fsl_denoise")
     for h_dir in [proj_fp, proj_fsl]:
         if not os.path.exists(h_dir):
             os.makedirs(h_dir)

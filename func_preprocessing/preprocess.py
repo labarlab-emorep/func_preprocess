@@ -7,6 +7,7 @@ software used for preprocessing EmoRep data.
 import os
 import glob
 import shutil
+import itertools
 from func_preprocessing import submit
 
 
@@ -36,6 +37,7 @@ def freesurfer(work_fs, subj_t1, subj, sess, log_dir):
     -------
     bool
         Whether FreeSurfer derivatives exist
+
     """
     fs_files = glob.glob(f"{work_fs}/**/aparc.a2009s+aseg.mgz", recursive=True)
     if not fs_files:
@@ -100,15 +102,19 @@ def fmriprep(
     Returns
     -------
     dict
+        "preproc_bold": ["/paths/to/*preproc_bold.nii.gz"]
         "aroma_bold": ["/paths/to/*AROMAnonaggr_bold.nii.gz"]
         "mask_bold": ["/paths/to/*run-*desc-brain_mask.nii.gz"]
+        "mask_anat": "/path/to/anat/*_res-2_desc-brain_mask.nii.gz"
 
     Raises
     ------
     FileNotFoundError
         <subj>.html missing
-        Different lengths of dict["aroma_bold"] and dict["mask_bold"]
-        AROMA or mask files not detected
+        Different lengths of dict["aroma_bold"], dict["preproc_bold"],
+            and dict["mask_bold"]
+        Preproc, AROMA, or mask files not detected
+
     """
 
     # Setup fmriprep specific dir/paths, parent directory
@@ -177,6 +183,12 @@ def fmriprep(
         "FreeSurfer output not found, continuing."
 
     # Make list of files for FSL
+    preproc_bold = sorted(
+        glob.glob(
+            f"{work_fp}/{subj}/**/func/*desc-preproc_bold.nii.gz",
+            recursive=True,
+        )
+    )
     aroma_bold = sorted(
         glob.glob(
             f"{work_fp}/{subj}/**/func/*desc-smoothAROMAnonaggr_bold.nii.gz",
@@ -189,19 +201,25 @@ def fmriprep(
             recursive=True,
         )
     )
+    mask_anat = glob.glob(
+        f"{work_fp}/{subj}/anat/{subj}_space-*_res-2_desc-brain_mask.nii.gz"
+    )[0]
 
-    # Check lists, return
-    if aroma_bold and mask_bold:
-        if len(aroma_bold) != len(mask_bold):
-            raise FileNotFoundError(
-                "Number of AROMA and mask bold files not equal."
-            )
-        return {"aroma_bold": aroma_bold, "mask_bold": mask_bold}
-    else:
+    # Check lists
+    if not preproc_bold and not aroma_bold and not mask_bold and not mask_anat:
+        raise FileNotFoundError(f"Missing fMRIPrep output for {subj}.")
+
+    if len(aroma_bold) != len(preproc_bold) != len(mask_bold):
         raise FileNotFoundError(
-            "Failed to detect desc-smoothAROMAnonaggr_bold"
-            + f" or run desc-brain_mask for {subj}."
+            "Number of AROMA, preprocessed, and mask bold files not equal."
         )
+
+    return {
+        "preproc_bold": preproc_bold,
+        "aroma_bold": aroma_bold,
+        "mask_bold": mask_bold,
+        "mask_anat": mask_anat,
+    }
 
 
 # %%
@@ -236,6 +254,7 @@ def _temporal_filt(run_preproc, out_dir, run_tfilt, subj, log_dir):
     Notes
     -----
     Writes <out_dir>/<run_tfilt>.
+
     """
     run_tmean = run_tfilt.split("desc-")[0] + "desc-tmean_bold.nii.gz"
     bash_cmd = f"""
@@ -264,8 +283,8 @@ def _temporal_filt(run_preproc, out_dir, run_tfilt, subj, log_dir):
         )
 
 
-def _apply_mask(
-    sing_afni, out_dir, run_tfilt_masked, run_tfilt, run_mask, subj, log_dir
+def _apply_brain_mask(
+    sing_afni, out_dir, run_tfilt_masked, run_tfilt, brain_mask, subj, log_dir
 ):
     """Mask temporally filtered data with AFNI.
 
@@ -283,8 +302,8 @@ def _apply_mask(
         will be made.
     run_tfilt : str
         File name of temporally filtered bold
-    run_mask : str
-        File name of run brain mask
+    brain_mask : str
+        Location, file name of brain mask
     subj : str
         BIDS subject
     log_dir : path
@@ -302,10 +321,11 @@ def _apply_mask(
     Notes
     -----
     Writes <out_dir>/<run_tfilt_masked>.
+
     """
-    run_mask_name = os.path.basename(run_mask)
+    brain_mask_name = os.path.basename(brain_mask)
     bash_cmd = f"""
-        cp {run_mask} {out_dir}/{run_mask_name}
+        cp {brain_mask} {out_dir}/{brain_mask_name}
 
         singularity run \\
         --cleanenv \\
@@ -314,12 +334,12 @@ def _apply_mask(
         {sing_afni} \\
         3dcalc \\
             -a {out_dir}/{run_tfilt} \\
-            -b {out_dir}/{run_mask_name} \\
+            -b {out_dir}/{brain_mask_name} \\
             -float \\
             -prefix {out_dir}/{run_tfilt_masked} \\
             -expr 'a*b'
 
-        rm {out_dir}/{run_mask_name}
+        rm {out_dir}/{brain_mask_name}
     """
     _, _ = submit.sbatch(
         bash_cmd,
@@ -367,23 +387,27 @@ def fsl_preproc(work_fsl, fp_dict, sing_afni, subj, log_dir):
         When preprocess EPI and mask have misaligned runs in dictionary
     FileNotFoundError
         When not all bold runs have a corresponding masked temporal filter file
+
     """
     # Unpack dict for readability
-    run_preproc_list = fp_dict["aroma_bold"]
-    run_mask_list = fp_dict["mask_bold"]
+    run_aroma_bold = fp_dict["aroma_bold"]
+    run_preproc_bold = fp_dict["preproc_bold"]
+    # run_mask_list = fp_dict["mask_bold"]
+    anat_mask = fp_dict["mask_anat"]
 
     # TODO refactor for job parallelization
-    for run_preproc, run_mask in zip(run_preproc_list, run_mask_list):
+    # for run_preproc, run_mask in zip(run_aroma_bold, run_mask_list):
+    for run_preproc in itertools.chain(run_preproc_bold, run_aroma_bold):
 
-        # Check runs are same
-        epi_run_num = run_preproc.split("run-")[1].split("_")[0]
-        mask_run_num = run_mask.split("run-")[1].split("_")[0]
-        if epi_run_num != mask_run_num:
-            raise NameError(
-                "Runs misalgined in dictionary,"
-                + f" for files {run_preproc} and {run_mask}."
-                + " Check preprocessing.fmriprep return."
-            )
+        # # Check runs are same
+        # epi_run_num = run_preproc.split("run-")[1].split("_")[0]
+        # mask_run_num = run_mask.split("run-")[1].split("_")[0]
+        # if epi_run_num != mask_run_num:
+        #     raise NameError(
+        #         "Runs misalgined in dictionary,"
+        #         + f" for files {run_preproc} and {run_mask}."
+        #         + " Check preprocessing.fmriprep return."
+        #     )
 
         # Setup output location
         sess = "ses-" + run_preproc.split("ses-")[1].split("/")[0]
@@ -408,12 +432,12 @@ def fsl_preproc(work_fsl, fp_dict, sing_afni, subj, log_dir):
             _temporal_filt(run_preproc, out_dir, run_tfilt, subj, log_dir)
 
         # Apply mask
-        _apply_mask(
+        _apply_brain_mask(
             sing_afni,
             out_dir,
             run_tfilt_masked,
             run_tfilt,
-            run_mask,
+            anat_mask,
             subj,
             log_dir,
         )
@@ -421,5 +445,5 @@ def fsl_preproc(work_fsl, fp_dict, sing_afni, subj, log_dir):
     fsl_files = glob.glob(
         f"{work_fsl}/{subj}/**/*desc-tfiltMasked_bold.nii.gz", recursive=True
     )
-    if len(fsl_files) != len(run_preproc_list):
+    if len(fsl_files) != (len(run_aroma_bold) + len(run_preproc_bold)):
         raise FileNotFoundError(f"Missing filtered + masked file for {subj}.")

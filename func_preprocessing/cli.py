@@ -1,16 +1,18 @@
 r"""Conduct preprocessing for EmoRep.
 
 Run data through FreeSurfer and fMRIPrep, then conduct temporal
-filtering via FSL and AFNI. Work is conducted in
-"/work/$(whoami)/EmoRep_BIDS/derivatives", and final files are saved
-to "<proj_dir>/derivatives/<fmriprep|fsl>/<subj>".
+filtering via FSL and AFNI. Work is conducted in:
+    /work/<whoami>/EmoRep/Exp2_Compute_Emotion/data_scanner_BIDS/derivatives/pre_processing
+
+Final files are saved to:
+    /hpc/group/labarlab/EmoRep/Exp2_Compute_Emotion/data_scanner_BIDS/derivatives/pre_processing
 
 For each subject, a parent job "p<subj>" is submitted that controls
 the pipeline. Named subprocess "<subj>foo>" are spawned when
 additional resources are required.
 
 Log files and scripts written to:
-    "/work/$(whoami)/EmoRep_BIDS/derivatives/logs/func_pp_<timestamp>"
+    /work/<whoami>/EmoRep/Exp2_Compute_Emotion/data_scanner_BIDS/derivatives/logs/func_pp_<timestamp>"
 
 Requires environmental variables SING_AFNI, SING_FMRIPREP, and FS_LICENSE
 to supply paths to singularity images of AFNI, fMRIPrep, and a FreeSurfer
@@ -129,14 +131,16 @@ def main():
             )
 
     # Setup work directory, for intermediates
-    # proj_name = os.path.basename(proj_dir)
-    # work_deriv = os.path.join("/work", user_name, proj_name, "derivatives")
     work_deriv = os.path.join(
-        "/work", user_name, proj_dir.split("labarlab/")[1], "derivatives"
+        "/work",
+        user_name,
+        proj_dir.split("labarlab/")[1],
+        "derivatives/pre_processing",
     )
     now_time = datetime.now()
     log_dir = os.path.join(
-        work_deriv, f"logs/func_pp_{now_time.strftime('%y-%m-%d_%H:%M')}"
+        os.path.dirname(work_deriv),
+        f"logs/func_pp_{now_time.strftime('%y-%m-%d_%H:%M')}",
     )
     if not os.path.exists(log_dir):
         os.makedirs(log_dir)
