@@ -12,6 +12,10 @@ additional resources are required.
 Log files and scripts written to:
     "/work/$(whoami)/EmoRep_BIDS/derivatives/logs/func_pp_<timestamp>"
 
+Requires environmental variables SING_AFNI, SING_FMRIPREP, and FS_LICENSE
+to supply paths to singularity images of AFNI, fMRIPrep, and a FreeSurfer
+license. The directory containting FS_LICENSE must also contain templateflow.
+
 Examples
 --------
 func_preprocessing -s sub-ER0009
@@ -20,6 +24,7 @@ func_preprocessing \
     -s sub-ER0009 sub-ER0010 \
     --proj-dir /hpc/group/labarlab/foo \
     --ignore-fmaps
+
 """
 # %%
 import os
@@ -61,7 +66,7 @@ def _get_args():
     parser.add_argument(
         "--proj-dir",
         type=str,
-        default="/hpc/group/labarlab/EmoRep_BIDS",
+        default="/hpc/group/labarlab/EmoRep/Exp2_Compute_Emotion/data_scanner_BIDS",
         help=textwrap.dedent(
             """\
             Path to BIDS-formatted project directory
@@ -113,9 +118,22 @@ def main():
     user_name = os.environ["USER"]
     fs_license = os.environ["FS_LICENSE"]
 
+    # Check for required files, directories research_bin
+    research_dir = os.path.dirname(fs_license)
+    research_contents = [x for x in os.listdir(research_dir)]
+    req_contents = ["templateflow", "license.txt"]
+    for check in req_contents:
+        if check not in research_contents:
+            raise FileNotFoundError(
+                f"Expected to find {check} in {research_dir}."
+            )
+
     # Setup work directory, for intermediates
-    proj_name = os.path.basename(proj_dir)
-    work_deriv = os.path.join("/work", user_name, proj_name, "derivatives")
+    # proj_name = os.path.basename(proj_dir)
+    # work_deriv = os.path.join("/work", user_name, proj_name, "derivatives")
+    work_deriv = os.path.join(
+        "/work", user_name, proj_dir.split("labarlab/")[1], "derivatives"
+    )
     now_time = datetime.now()
     log_dir = os.path.join(
         work_deriv, f"logs/func_pp_{now_time.strftime('%y-%m-%d_%H:%M')}"
