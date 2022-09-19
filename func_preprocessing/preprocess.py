@@ -397,17 +397,18 @@ def fsl_preproc(work_fsl, fp_dict, sing_afni, subj, log_dir):
 
     # TODO refactor for job parallelization
     # for run_preproc, run_mask in zip(run_aroma_bold, run_mask_list):
-    for run_preproc in itertools.chain(run_preproc_bold, run_aroma_bold):
 
-        # # Check runs are same
-        # epi_run_num = run_preproc.split("run-")[1].split("_")[0]
-        # mask_run_num = run_mask.split("run-")[1].split("_")[0]
-        # if epi_run_num != mask_run_num:
-        #     raise NameError(
-        #         "Runs misalgined in dictionary,"
-        #         + f" for files {run_preproc} and {run_mask}."
-        #         + " Check preprocessing.fmriprep return."
-        #     )
+    # # Check runs are same
+    # epi_run_num = run_preproc.split("run-")[1].split("_")[0]
+    # mask_run_num = run_mask.split("run-")[1].split("_")[0]
+    # if epi_run_num != mask_run_num:
+    #     raise NameError(
+    #         "Runs misalgined in dictionary,"
+    #         + f" for files {run_preproc} and {run_mask}."
+    #         + " Check preprocessing.fmriprep return."
+    #     )
+
+    for run_preproc in itertools.chain(run_preproc_bold, run_aroma_bold):
 
         # Setup output location
         sess = "ses-" + run_preproc.split("ses-")[1].split("/")[0]
@@ -415,10 +416,17 @@ def fsl_preproc(work_fsl, fp_dict, sing_afni, subj, log_dir):
         if not os.path.exists(out_dir):
             os.makedirs(out_dir)
 
+        # Set description based off aroma/preproc
+        h_desc = (
+            "tfiltAROMAMasked"
+            if "smoothAROMA" in run_preproc
+            else "tfiltMasked"
+        )
+
         # Avoid repeating work
         run_tfilt_masked = (
             os.path.basename(run_preproc).split("desc-")[0]
-            + "desc-tfiltMasked_bold.nii.gz"
+            + f"desc-{h_desc}_bold.nii.gz"
         )
         if os.path.exists(f"{out_dir}/{run_tfilt_masked}"):
             continue
