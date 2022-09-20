@@ -379,7 +379,8 @@ def fsl_preproc(work_fsl, fp_dict, sing_afni, subj, log_dir):
 
     Returns
     -------
-    None
+    list
+        path, location of denoised run files
 
     Raises
     ------
@@ -422,6 +423,7 @@ def fsl_preproc(work_fsl, fp_dict, sing_afni, subj, log_dir):
             if "smoothAROMA" in run_preproc
             else "tfiltMasked"
         )
+        print(f"run_preproc : {run_preproc}\nh_desc : {h_desc}")
 
         # Avoid repeating work
         run_tfilt_masked = (
@@ -450,8 +452,9 @@ def fsl_preproc(work_fsl, fp_dict, sing_afni, subj, log_dir):
             log_dir,
         )
 
-    fsl_files = glob.glob(
-        f"{work_fsl}/{subj}/**/*desc-tfiltMasked_bold.nii.gz", recursive=True
+    denoise_files = glob.glob(
+        f"{work_fsl}/{subj}/**/*desc-tfilt*Masked_bold.nii.gz", recursive=True
     )
-    if len(fsl_files) != (len(run_aroma_bold) + len(run_preproc_bold)):
-        raise FileNotFoundError(f"Missing filtered + masked file for {subj}.")
+    if len(denoise_files) != (len(run_aroma_bold) + len(run_preproc_bold)):
+        raise FileNotFoundError(f"Missing tfiltMasked files for {subj}.")
+    return denoise_files

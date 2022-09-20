@@ -125,8 +125,8 @@ def schedule_subj(
             os.makedirs(h_dir)
 
     # Setup software derivatives dirs, for storage
-    proj_fp = os.path.join(proj_deriv, "pre_processing/fmriprep")
-    proj_fsl = os.path.join(proj_deriv, "pre_processing/fsl_denoise")
+    proj_fp = os.path.join(proj_deriv, "fmriprep")
+    proj_fsl = os.path.join(proj_deriv, "fsl_denoise")
     for h_dir in [proj_fp, proj_fsl]:
         if not os.path.exists(h_dir):
             os.makedirs(h_dir)
@@ -157,7 +157,7 @@ def schedule_subj(
         )
 
         # Finish preprocessing with FSL, AFNI
-        preprocess.fsl_preproc(
+        _ = preprocess.fsl_preproc(
             "{work_fsl}",
             fp_dict,
             "{sing_afni}",

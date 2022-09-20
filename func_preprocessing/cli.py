@@ -112,7 +112,7 @@ def main():
 
     # Setup group project directory, paths
     proj_raw = os.path.join(proj_dir, "rawdata")
-    proj_deriv = os.path.join(proj_dir, "derivatives")
+    proj_deriv = os.path.join(proj_dir, "derivatives/pre_processing")
 
     # Get environmental vars
     sing_afni = os.environ["SING_AFNI"]

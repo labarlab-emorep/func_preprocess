@@ -30,29 +30,29 @@ def copy_clean(proj_deriv, work_deriv, subj):
     nii_list = sorted(
         glob.glob(f"{work_fsl_subj}/**/*.nii.gz", recursive=True)
     )
-    remove_fsl = [
-        x for x in nii_list if not fnmatch(x, "*desc-tfiltMasked_bold.nii.gz")
-    ]
+    remove_fsl = [x for x in nii_list if not fnmatch(x, "*Masked_bold.nii.gz")]
     for rm_file in remove_fsl:
         os.remove(rm_file)
 
     # Copy remaining FSL files to proj_deriv, use faster bash
+    print("\n\tCopying fsl_denoise files ...")
     proj_fsl_subj = os.path.join(proj_deriv, "fsl_denoise", subj)
     cp_cmd = f"cp -r {work_fsl_subj} {proj_fsl_subj}"
     cp_sp = subprocess.Popen(cp_cmd, shell=True, stdout=subprocess.PIPE)
     _ = cp_sp.communicate()
 
-    # Clean fMRIprep files
-    print("\n\tCleaning fMRIPrep files ...")
+    # # Clean fMRIprep files
+    # print("\n\tCleaning fMRIPrep files ...")
     work_fp_subj = os.path.join(work_deriv, "fmriprep", subj)
-    remove_fp = glob.glob(
-        f"{work_fp_subj}/**/*desc-smoothAROMAnonaggr_bold.nii.gz",
-        recursive=True,
-    )
-    for rm_file in remove_fp:
-        os.remove(rm_file)
+    # remove_fp = glob.glob(
+    #     f"{work_fp_subj}/**/*desc-smoothAROMAnonaggr_bold.nii.gz",
+    #     recursive=True,
+    # )
+    # for rm_file in remove_fp:
+    #     os.remove(rm_file)
 
     # Copy fMRIPrep files
+    print("\n\tCopying fMRIPrep files ...")
     work_fp = os.path.dirname(work_fp_subj)
     proj_fp = os.path.join(proj_deriv, "fmriprep")
     keep_fmriprep = [
