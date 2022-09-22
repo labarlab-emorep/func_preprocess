@@ -66,12 +66,35 @@ def _get_args():
         ),
     )
     parser.add_argument(
+        "--no-freesurfer",
+        action="store_true",
+        help=textwrap.dedent(
+            """\
+            Whether to use the --fs-no-reconall option with fmriprep,
+            True if "--no--freesurfer" else False
+            """
+        ),
+    )
+    parser.add_argument(
         "--proj-dir",
         type=str,
         default="/hpc/group/labarlab/EmoRep/Exp2_Compute_Emotion/data_scanner_BIDS",
         help=textwrap.dedent(
             """\
             Path to BIDS-formatted project directory
+            (default : %(default)s)
+            """
+        ),
+    )
+    parser.add_argument(
+        "--work-dir",
+        type=str,
+        default=None,
+        help=textwrap.dedent(
+            """\
+            Path to derivatives location on work partition, for processing
+            intermediates. If "--work-dir None", the work-dir will setup in
+            /work/<user>/EmoRep/Exp2_Compute_Emotion/data_scanner_BIDS/derivatives
             (default : %(default)s)
             """
         ),
@@ -107,7 +130,9 @@ def main():
     args = _get_args().parse_args()
     subj_list = args.sub_list
     proj_dir = args.proj_dir
+    work_deriv = args.work_dir
     ignore_fmaps = args.ignore_fmaps
+    no_freesurfer = args.no_freesurfer
     fd_thresh = args.fd_thresh
 
     # Setup group project directory, paths
@@ -131,12 +156,13 @@ def main():
             )
 
     # Setup work directory, for intermediates
-    work_deriv = os.path.join(
-        "/work",
-        user_name,
-        proj_dir.split("labarlab/")[1],
-        "derivatives/pre_processing",
-    )
+    if not work_deriv:
+        work_deriv = os.path.join(
+            "/work",
+            user_name,
+            "EmoRep/Exp2_Compute_Emotion/data_scanner_BIDS",
+            "derivatives/pre_processing",
+        )
     now_time = datetime.now()
     log_dir = os.path.join(
         os.path.dirname(work_deriv),
@@ -156,6 +182,7 @@ def main():
             fs_license,
             fd_thresh,
             ignore_fmaps,
+            no_freesurfer,
             sing_afni,
             log_dir,
         )

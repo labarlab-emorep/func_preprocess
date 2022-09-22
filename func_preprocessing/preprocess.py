@@ -72,6 +72,7 @@ def fmriprep(
     fs_license,
     fd_thresh,
     ignore_fmaps,
+    no_freesurfer,
     log_dir,
 ):
     """Run fMRIPrep for single subject.
@@ -96,6 +97,8 @@ def fmriprep(
         Threshold for framewise displacement
     ignore_fmaps : bool
         Whether to incorporate fmaps in preprocessing
+    no_freesurfer : bool
+        Whether to use the --fs-no-reconall option
     log_dir : path
         Location of directory to capture logs
 
@@ -130,36 +133,68 @@ def fmriprep(
     # Construct fmriprep call
     check_file = f"{work_fp}/{subj}.html"
     if not os.path.exists(check_file):
-        bash_cmd = f"""
-            singularity run \\
-            --cleanenv \\
-            --bind {proj_raw}:{proj_raw} \\
-            --bind {work_deriv}:{work_deriv} \\
-            --bind {research_dir}:{research_dir} \\
-            --bind {proj_raw}:/data \\
-            --bind {work_fp}:/out \\
-            {sing_fmriprep} \\
-            /data \\
-            /out \\
-            participant \\
-            --work-dir {work_fp_tmp} \\
-            --participant-label {subj[4:]} \\
-            --skull-strip-template MNI152NLin6Asym \\
-            --output-spaces MNI152NLin6Asym:res-2 \\
-            --fs-license {fs_license} \\
-            --fs-subjects-dir {work_fs} \\
-            --use-aroma \\
-            --fd-spike-threshold {fd_thresh} \\
-            --skip-bids-validation \\
-            --bids-database-dir {work_fp_bids} \\
-            --nthreads 10 \\
-            --omp-nthreads 10 \\
-            --stop-on-first-crash \\
-        """
+        # bash_cmd = f"""
+        #     singularity run \\
+        #     --cleanenv \\
+        #     --bind {proj_raw}:{proj_raw} \\
+        #     --bind {work_deriv}:{work_deriv} \\
+        #     --bind {research_dir}:{research_dir} \\
+        #     --bind {proj_raw}:/data \\
+        #     --bind {work_fp}:/out \\
+        #     {sing_fmriprep} \\
+        #     /data \\
+        #     /out \\
+        #     participant \\
+        #     --work-dir {work_fp_tmp} \\
+        #     --participant-label {subj[4:]} \\
+        #     --skull-strip-template MNI152NLin6Asym \\
+        #     --output-spaces MNI152NLin6Asym:res-2 \\
+        #     --fs-license {fs_license} \\
+        #     --fs-subjects-dir {work_fs} \\
+        #     --use-aroma \\
+        #     --fd-spike-threshold {fd_thresh} \\
+        #     --skip-bids-validation \\
+        #     --bids-database-dir {work_fp_bids} \\
+        #     --nthreads 10 \\
+        #     --omp-nthreads 10 \\
+        #     --stop-on-first-crash \\
+        # """
+        # # Append fmriprep call, submit
+        # if ignore_fmaps:
+        #     bash_cmd += " --ignore fieldmaps"
 
-        # Append fmriprep call, submit
+        bash_list = [
+            "singularity run",
+            "--cleanenv",
+            f"--bind {proj_raw}:{proj_raw}",
+            f"--bind {work_deriv}:{work_deriv}",
+            f"--bind {research_dir}:{research_dir}",
+            f"--bind {proj_raw}:/data",
+            f"--bind {work_fp}:/out",
+            f"{sing_fmriprep} /data /out participant",
+            f"--work-dir {work_fp_tmp}",
+            f"--participant-label {subj[4:]}",
+            "--skull-strip-template MNI152NLin6Asym",
+            "--output-spaces MNI152NLin6Asym:res-2",
+            f"--fs-license {fs_license}",
+            f"--fs-subjects-dir {work_fs}",
+            "--use-aroma",
+            f"--fd-spike-threshold {fd_thresh}",
+            "--skip-bids-validation",
+            f"--bids-database-dir {work_fp_bids}",
+            "--nthreads 10 --omp-nthreads 10",
+            "--stop-on-first-crash",
+        ]
+
+        # Adjust fmriprep call from user input
         if ignore_fmaps:
-            bash_cmd += " --ignore fieldmaps"
+            bash_list.append("--ignore fieldmaps")
+
+        if no_freesurfer:
+            bash_list.append("--fs-no-reconall")
+
+        # Submit fmriprep call
+        bash_cmd = " ".join(bash_list)
         _, _ = submit.sbatch(
             bash_cmd,
             f"{subj[7:]}_fmriprep",

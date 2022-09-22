@@ -75,6 +75,7 @@ def schedule_subj(
     fs_license,
     fd_thresh,
     ignore_fmaps,
+    no_freesurfer,
     sing_afni,
     log_dir,
 ):
@@ -104,6 +105,8 @@ def schedule_subj(
         Threshold for framewise displacement
     ignore_fmaps : bool
         Whether to incorporate fmaps in preprocessing
+    no_freesurfer : bool
+        Whether to use the --fs-no-reconall option
     sing_afni : path, str
         Location of afni singularity iamge
     log_dir : path
@@ -153,11 +156,12 @@ def schedule_subj(
             "{fs_license}",
             {fd_thresh},
             {ignore_fmaps},
+            {no_freesurfer},
             "{log_dir}",
         )
 
         # Finish preprocessing with FSL, AFNI
-        _ = preprocess.fsl_preproc(
+        denoise_files = preprocess.fsl_preproc(
             "{work_fsl}",
             fp_dict,
             "{sing_afni}",
@@ -166,11 +170,12 @@ def schedule_subj(
         )
 
         # Clean up
-        manage_data.copy_clean(
-            "{proj_deriv}",
-            "{work_deriv}",
-            "{subj}"
-        )
+        if denoise_files:
+            manage_data.copy_clean(
+                "{proj_deriv}",
+                "{work_deriv}",
+                "{subj}"
+            )
 
     """
     sbatch_cmd = textwrap.dedent(sbatch_cmd)
