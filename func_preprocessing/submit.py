@@ -174,7 +174,7 @@ def schedule_subj(
             manage_data.copy_clean(
                 "{proj_deriv}",
                 "{work_deriv}",
-                "{subj}"
+                "{subj}",
                 {no_freesurfer},
             )
 

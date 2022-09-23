@@ -199,9 +199,9 @@ def fmriprep(
             bash_cmd,
             f"{subj[7:]}_fmriprep",
             log_dir,
-            mem_gig=10,
+            mem_gig=12,
             num_cpus=10,
-            num_hours=20,
+            num_hours=40,
         )
 
         # Check for output
