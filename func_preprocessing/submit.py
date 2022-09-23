@@ -175,6 +175,7 @@ def schedule_subj(
                 "{proj_deriv}",
                 "{work_deriv}",
                 "{subj}"
+                {no_freesurfer},
             )
 
     """
