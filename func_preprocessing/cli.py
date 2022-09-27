@@ -1,34 +1,43 @@
 r"""Conduct preprocessing for EmoRep.
 
 Run data through FreeSurfer and fMRIPrep, then conduct temporal
-filtering via FSL and AFNI. Work is conducted in:
-    /work/<whoami>/EmoRep/Exp2_Compute_Emotion/data_scanner_BIDS/derivatives/pre_processing
+filtering via FSL and AFNI. Unless otherwise specified via --work-dir,
+work is conducted in:
+    /work/<whoami>/EmoRep/pre_processing
 
 Final files are saved to:
-    /hpc/group/labarlab/EmoRep/Exp2_Compute_Emotion/data_scanner_BIDS/derivatives/pre_processing
+    <proj-dir>/derivatives/pre_processing/[fmriprep | freesurfer | fsl_denoise]
 
 For each subject, a parent job "p<subj>" is submitted that controls
-the pipeline. Named subprocess "<subj>foo>" are spawned when
+the workflow. Named subprocess "<subj>foo>" are spawned when
 additional resources are required.
 
 Log files and scripts written to:
-    /work/<whoami>/EmoRep/Exp2_Compute_Emotion/data_scanner_BIDS/derivatives/logs/func_pp_<timestamp>"
+    /work/<whoami>/EmoRep/pre_processing/logs/func_pp_<timestamp>
 
 Requires environmental variables SING_AFNI, SING_FMRIPREP, and FS_LICENSE
-to supply paths to singularity images of AFNI, fMRIPrep, and a FreeSurfer
-license. The directory containting FS_LICENSE must also contain templateflow.
+from the "emorep" project environment to supply paths to singularity images
+of AFNI, fMRIPrep, and a FreeSurfer license. The directory containting
+FS_LICENSE must also contain templateflow.
 
 Examples
 --------
 func_preprocessing -s sub-ER0009
+
+func_preprocessing -s sub-ER0009 sub-ER0010
 
 func_preprocessing \
     -s sub-ER0009 sub-ER0010 \
     --proj-dir /hpc/group/labarlab/foo \
     --ignore-fmaps
 
+func_preprocessing \
+    -s sub-ER0009 \
+    --no-freesurfer \
+    --fd-thresh 0.2 \
+    --work-dir /work/foo/test_dir
+
 """
-# %%
 import os
 import sys
 import time
@@ -38,7 +47,6 @@ from argparse import ArgumentParser, RawTextHelpFormatter
 from func_preprocessing import submit
 
 
-# %%fnma
 def _get_args():
     """Get and parse arguments."""
     parser = ArgumentParser(
@@ -93,8 +101,9 @@ def _get_args():
         help=textwrap.dedent(
             """\
             Path to derivatives location on work partition, for processing
-            intermediates. If "--work-dir None", the work-dir will setup in
-            /work/<user>/EmoRep/Exp2_Compute_Emotion/data_scanner_BIDS/derivatives
+            intermediates. If --work-dir is unspecified, the work-dir will
+            setup in /work/<user>/EmoRep/derivatives. Be mindful of path
+            lengths to avoid a buffer overflow in FreeSurfer.
             (default : %(default)s)
             """
         ),
@@ -160,8 +169,7 @@ def main():
         work_deriv = os.path.join(
             "/work",
             user_name,
-            "EmoRep/Exp2_Compute_Emotion/data_scanner_BIDS",
-            "derivatives/pre_processing",
+            "EmoRep/pre_processing",
         )
     now_time = datetime.now()
     log_dir = os.path.join(

@@ -133,36 +133,6 @@ def fmriprep(
     # Construct fmriprep call
     check_file = f"{work_fp}/{subj}.html"
     if not os.path.exists(check_file):
-        # bash_cmd = f"""
-        #     singularity run \\
-        #     --cleanenv \\
-        #     --bind {proj_raw}:{proj_raw} \\
-        #     --bind {work_deriv}:{work_deriv} \\
-        #     --bind {research_dir}:{research_dir} \\
-        #     --bind {proj_raw}:/data \\
-        #     --bind {work_fp}:/out \\
-        #     {sing_fmriprep} \\
-        #     /data \\
-        #     /out \\
-        #     participant \\
-        #     --work-dir {work_fp_tmp} \\
-        #     --participant-label {subj[4:]} \\
-        #     --skull-strip-template MNI152NLin6Asym \\
-        #     --output-spaces MNI152NLin6Asym:res-2 \\
-        #     --fs-license {fs_license} \\
-        #     --fs-subjects-dir {work_fs} \\
-        #     --use-aroma \\
-        #     --fd-spike-threshold {fd_thresh} \\
-        #     --skip-bids-validation \\
-        #     --bids-database-dir {work_fp_bids} \\
-        #     --nthreads 10 \\
-        #     --omp-nthreads 10 \\
-        #     --stop-on-first-crash \\
-        # """
-        # # Append fmriprep call, submit
-        # if ignore_fmaps:
-        #     bash_cmd += " --ignore fieldmaps"
-
         bash_list = [
             "singularity run",
             "--cleanenv",
@@ -184,6 +154,7 @@ def fmriprep(
             f"--bids-database-dir {work_fp_bids}",
             "--nthreads 10 --omp-nthreads 10",
             "--stop-on-first-crash",
+            "--debug all",
         ]
 
         # Adjust fmriprep call from user input
@@ -395,7 +366,7 @@ def fsl_preproc(work_fsl, fp_dict, sing_afni, subj, log_dir):
     """Conduct extra preprocessing via FSL and AFNI.
 
     Temporally filter BOLD data and then multiply with
-    a run-specific brain mask.
+    an anatomical brain mask.
 
     Parameters
     ----------
@@ -428,22 +399,10 @@ def fsl_preproc(work_fsl, fp_dict, sing_afni, subj, log_dir):
     # Unpack dict for readability
     run_aroma_bold = fp_dict["aroma_bold"]
     run_preproc_bold = fp_dict["preproc_bold"]
-    # run_mask_list = fp_dict["mask_bold"]
     anat_mask = fp_dict["mask_anat"]
 
+    # Temporal filter and mask both preproc and aroma files
     # TODO refactor for job parallelization
-    # for run_preproc, run_mask in zip(run_aroma_bold, run_mask_list):
-
-    # # Check runs are same
-    # epi_run_num = run_preproc.split("run-")[1].split("_")[0]
-    # mask_run_num = run_mask.split("run-")[1].split("_")[0]
-    # if epi_run_num != mask_run_num:
-    #     raise NameError(
-    #         "Runs misalgined in dictionary,"
-    #         + f" for files {run_preproc} and {run_mask}."
-    #         + " Check preprocessing.fmriprep return."
-    #     )
-
     for run_preproc in itertools.chain(run_preproc_bold, run_aroma_bold):
 
         # Setup output location
