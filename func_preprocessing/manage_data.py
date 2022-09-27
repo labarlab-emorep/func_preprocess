@@ -32,7 +32,12 @@ def copy_clean(proj_deriv, work_deriv, subj, no_freesurfer):
     nii_list = sorted(
         glob.glob(f"{work_fsl_subj}/**/*.nii.gz", recursive=True)
     )
-    remove_fsl = [x for x in nii_list if not fnmatch(x, "*Masked_bold.nii.gz")]
+    remove_fsl = [
+        x
+        for x in nii_list
+        if not fnmatch(x, "*Masked_bold.nii.gz")
+        and not fnmatch(x, "*res-2*_bold.nii.gz")
+    ]
     for rm_file in remove_fsl:
         os.remove(rm_file)
 
