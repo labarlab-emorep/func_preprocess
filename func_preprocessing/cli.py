@@ -117,7 +117,7 @@ def _get_args():
         help=textwrap.dedent(
             """\
             List of subject IDs to submit for pre-processing,
-            e.g. "-s ER4414" or "--sub-list ER4414 ER4415 ER4416".
+            e.g. "-s sub-ER4414" or "--sub-list sub-ER4414 sub-ER4415"
             """
         ),
         type=str,
