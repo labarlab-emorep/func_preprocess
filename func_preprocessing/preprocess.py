@@ -188,7 +188,7 @@ def fmriprep(
     except FileNotFoundError:
         "FreeSurfer output not found, continuing."
 
-    # Make list of files for FSL
+    # Make list of needed files for FSL denoising
     preproc_bold = sorted(
         glob.glob(
             f"{work_fp}/{subj}/**/func/*desc-preproc_bold.nii.gz",
@@ -207,9 +207,15 @@ def fmriprep(
             recursive=True,
         )
     )
-    mask_anat = glob.glob(
-        f"{work_fp}/{subj}/anat/{subj}_space-*_res-2_desc-brain_mask.nii.gz"
-    )[0]
+
+    # Find anatomical mask based on multiple or single sessions
+    mask_str = f"{subj}_*_res-2_desc-brain_mask.nii.gz"
+    try:
+        anat_path = f"{work_fp}/{subj}/anat"
+        mask_anat = sorted(glob.glob(f"{anat_path}/{mask_str}"))[0]
+    except IndexError:
+        anat_path = f"{work_fp}/{subj}/ses-*/anat"
+        mask_anat = sorted(glob.glob(f"{anat_path}/{mask_str}"))[0]
 
     # Check lists
     if not preproc_bold and not aroma_bold and not mask_bold and not mask_anat:
