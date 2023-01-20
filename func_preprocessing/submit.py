@@ -75,6 +75,7 @@ def schedule_subj(
     fs_license,
     fd_thresh,
     ignore_fmaps,
+    no_freesurfer,
     sing_afni,
     log_dir,
 ):
@@ -104,6 +105,8 @@ def schedule_subj(
         Threshold for framewise displacement
     ignore_fmaps : bool
         Whether to incorporate fmaps in preprocessing
+    no_freesurfer : bool
+        Whether to use the --fs-no-reconall option
     sing_afni : path, str
         Location of afni singularity iamge
     log_dir : path
@@ -119,14 +122,14 @@ def schedule_subj(
     # Setup software derivatives dirs, for working
     work_fp = os.path.join(work_deriv, "fmriprep")
     work_fs = os.path.join(work_deriv, "freesurfer")
-    work_fsl = os.path.join(work_deriv, "fsl")
+    work_fsl = os.path.join(work_deriv, "fsl_denoise")
     for h_dir in [work_fp, work_fs, work_fsl]:
         if not os.path.exists(h_dir):
             os.makedirs(h_dir)
 
     # Setup software derivatives dirs, for storage
     proj_fp = os.path.join(proj_deriv, "fmriprep")
-    proj_fsl = os.path.join(proj_deriv, "fsl")
+    proj_fsl = os.path.join(proj_deriv, "fsl_denoise")
     for h_dir in [proj_fp, proj_fsl]:
         if not os.path.exists(h_dir):
             os.makedirs(h_dir)
@@ -153,11 +156,12 @@ def schedule_subj(
             "{fs_license}",
             {fd_thresh},
             {ignore_fmaps},
+            {no_freesurfer},
             "{log_dir}",
         )
 
         # Finish preprocessing with FSL, AFNI
-        preprocess.fsl_preproc(
+        denoise_files = preprocess.fsl_preproc(
             "{work_fsl}",
             fp_dict,
             "{sing_afni}",
@@ -166,11 +170,13 @@ def schedule_subj(
         )
 
         # Clean up
-        manage_data.copy_clean(
-            "{proj_deriv}",
-            "{work_deriv}",
-            "{subj}"
-        )
+        if denoise_files:
+            manage_data.copy_clean(
+                "{proj_deriv}",
+                "{work_deriv}",
+                "{subj}",
+                {no_freesurfer},
+            )
 
     """
     sbatch_cmd = textwrap.dedent(sbatch_cmd)

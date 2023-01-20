@@ -8,6 +8,7 @@ software used for preprocessing EmoRep data.
 import os
 import glob
 import shutil
+import itertools
 from func_preprocessing import submit
 
 
@@ -72,6 +73,7 @@ def fmriprep(
     fs_license,
     fd_thresh,
     ignore_fmaps,
+    no_freesurfer,
     log_dir,
 ):
     """Run fMRIPrep for single subject.
@@ -96,14 +98,18 @@ def fmriprep(
         Threshold for framewise displacement
     ignore_fmaps : bool
         Whether to incorporate fmaps in preprocessing
+    no_freesurfer : bool
+        Whether to use the --fs-no-reconall option
     log_dir : path
         Location of directory to capture logs
 
     Returns
     -------
     dict
+        "preproc_bold": ["/paths/to/*preproc_bold.nii.gz"]
         "aroma_bold": ["/paths/to/*AROMAnonaggr_bold.nii.gz"]
         "mask_bold": ["/paths/to/*run-*desc-brain_mask.nii.gz"]
+        "mask_anat": "/path/to/anat/*_res-2_desc-brain_mask.nii.gz"
 
     Raises
     ------
@@ -127,43 +133,46 @@ def fmriprep(
     # Construct fmriprep call
     check_file = f"{work_fp}/{subj}.html"
     if not os.path.exists(check_file):
-        bash_cmd = f"""
-            singularity run \\
-            --cleanenv \\
-            --bind {proj_raw}:{proj_raw} \\
-            --bind {work_deriv}:{work_deriv} \\
-            --bind {research_dir}:{research_dir} \\
-            --bind {proj_raw}:/data \\
-            --bind {work_fp}:/out \\
-            {sing_fmriprep} \\
-            /data \\
-            /out \\
-            participant \\
-            --work-dir {work_fp_tmp} \\
-            --participant-label {subj[4:]} \\
-            --skull-strip-template MNI152NLin6Asym \\
-            --output-spaces MNI152NLin6Asym:res-2 \\
-            --fs-license {fs_license} \\
-            --fs-subjects-dir {work_fs} \\
-            --use-aroma \\
-            --fd-spike-threshold {fd_thresh} \\
-            --skip-bids-validation \\
-            --bids-database-dir {work_fp_bids} \\
-            --nthreads 10 \\
-            --omp-nthreads 10 \\
-            --stop-on-first-crash \\
-        """
+        bash_list = [
+            "singularity run",
+            "--cleanenv",
+            f"--bind {proj_raw}:{proj_raw}",
+            f"--bind {work_deriv}:{work_deriv}",
+            f"--bind {research_dir}:{research_dir}",
+            f"--bind {proj_raw}:/data",
+            f"--bind {work_fp}:/out",
+            f"{sing_fmriprep} /data /out participant",
+            f"--work-dir {work_fp_tmp}",
+            f"--participant-label {subj[4:]}",
+            "--skull-strip-template MNI152NLin6Asym",
+            "--output-spaces MNI152NLin6Asym:res-2",
+            f"--fs-license {fs_license}",
+            f"--fs-subjects-dir {work_fs}",
+            "--use-aroma",
+            f"--fd-spike-threshold {fd_thresh}",
+            "--skip-bids-validation",
+            f"--bids-database-dir {work_fp_bids}",
+            "--nthreads 10 --omp-nthreads 10",
+            "--stop-on-first-crash",
+            "--debug all",
+        ]
 
-        # Append fmriprep call, submit
+        # Adjust fmriprep call from user input
         if ignore_fmaps:
-            bash_cmd += " --ignore fieldmaps"
+            bash_list.append("--ignore fieldmaps")
+
+        if no_freesurfer:
+            bash_list.append("--fs-no-reconall")
+
+        # Submit fmriprep call
+        bash_cmd = " ".join(bash_list)
         _, _ = submit.sbatch(
             bash_cmd,
             f"{subj[7:]}_fmriprep",
             log_dir,
-            mem_gig=10,
+            mem_gig=12,
             num_cpus=10,
-            num_hours=20,
+            num_hours=40,
         )
 
         # Check for output
@@ -179,7 +188,13 @@ def fmriprep(
     except FileNotFoundError:
         "FreeSurfer output not found, continuing."
 
-    # Make list of files for FSL
+    # Make list of needed files for FSL denoising
+    preproc_bold = sorted(
+        glob.glob(
+            f"{work_fp}/{subj}/**/func/*desc-preproc_bold.nii.gz",
+            recursive=True,
+        )
+    )
     aroma_bold = sorted(
         glob.glob(
             f"{work_fp}/{subj}/**/func/*desc-smoothAROMAnonaggr_bold.nii.gz",
@@ -193,18 +208,30 @@ def fmriprep(
         )
     )
 
-    # Check lists, return
-    if aroma_bold and mask_bold:
-        if len(aroma_bold) != len(mask_bold):
-            raise FileNotFoundError(
-                "Number of AROMA and mask bold files not equal."
-            )
-        return {"aroma_bold": aroma_bold, "mask_bold": mask_bold}
-    else:
+    # Find anatomical mask based on multiple or single sessions
+    mask_str = f"{subj}_*_res-2_desc-brain_mask.nii.gz"
+    try:
+        anat_path = f"{work_fp}/{subj}/anat"
+        mask_anat = sorted(glob.glob(f"{anat_path}/{mask_str}"))[0]
+    except IndexError:
+        anat_path = f"{work_fp}/{subj}/ses-*/anat"
+        mask_anat = sorted(glob.glob(f"{anat_path}/{mask_str}"))[0]
+
+    # Check lists
+    if not preproc_bold and not aroma_bold and not mask_bold and not mask_anat:
+        raise FileNotFoundError(f"Missing fMRIPrep output for {subj}.")
+
+    if len(aroma_bold) != len(preproc_bold) != len(mask_bold):
         raise FileNotFoundError(
-            "Failed to detect desc-smoothAROMAnonaggr_bold"
-            + f" or run desc-brain_mask for {subj}."
+            "Number of AROMA, preprocessed, and mask bold files not equal."
         )
+
+    return {
+        "preproc_bold": preproc_bold,
+        "aroma_bold": aroma_bold,
+        "mask_bold": mask_bold,
+        "mask_anat": mask_anat,
+    }
 
 
 # %%
@@ -268,8 +295,8 @@ def _temporal_filt(run_preproc, out_dir, run_tfilt, subj, log_dir):
         )
 
 
-def _apply_mask(
-    sing_afni, out_dir, run_tfilt_masked, run_tfilt, run_mask, subj, log_dir
+def _apply_brain_mask(
+    sing_afni, out_dir, run_tfilt_masked, run_tfilt, brain_mask, subj, log_dir
 ):
     """Mask temporally filtered data with AFNI.
 
@@ -287,8 +314,8 @@ def _apply_mask(
         will be made.
     run_tfilt : str
         File name of temporally filtered bold
-    run_mask : str
-        File name of run brain mask
+    brain_mask : str
+        Location, file name of brain mask
     subj : str
         BIDS subject
     log_dir : path
@@ -308,9 +335,9 @@ def _apply_mask(
     Writes <out_dir>/<run_tfilt_masked>.
 
     """
-    run_mask_name = os.path.basename(run_mask)
+    brain_mask_name = os.path.basename(brain_mask)
     bash_cmd = f"""
-        cp {run_mask} {out_dir}/{run_mask_name}
+        cp {brain_mask} {out_dir}/{brain_mask_name}
 
         singularity run \\
         --cleanenv \\
@@ -319,12 +346,12 @@ def _apply_mask(
         {sing_afni} \\
         3dcalc \\
             -a {out_dir}/{run_tfilt} \\
-            -b {out_dir}/{run_mask_name} \\
+            -b {out_dir}/{brain_mask_name} \\
             -float \\
             -prefix {out_dir}/{run_tfilt_masked} \\
             -expr 'a*b'
 
-        rm {out_dir}/{run_mask_name}
+        rm {out_dir}/{brain_mask_name}
     """
     _, _ = submit.sbatch(
         bash_cmd,
@@ -345,7 +372,7 @@ def fsl_preproc(work_fsl, fp_dict, sing_afni, subj, log_dir):
     """Conduct extra preprocessing via FSL and AFNI.
 
     Temporally filter BOLD data and then multiply with
-    a run-specific brain mask.
+    an anatomical brain mask.
 
     Parameters
     ----------
@@ -364,7 +391,8 @@ def fsl_preproc(work_fsl, fp_dict, sing_afni, subj, log_dir):
 
     Returns
     -------
-    None
+    list
+        path, location of denoised run files
 
     Raises
     ------
@@ -375,21 +403,13 @@ def fsl_preproc(work_fsl, fp_dict, sing_afni, subj, log_dir):
 
     """
     # Unpack dict for readability
-    run_preproc_list = fp_dict["aroma_bold"]
-    run_mask_list = fp_dict["mask_bold"]
+    run_aroma_bold = fp_dict["aroma_bold"]
+    run_preproc_bold = fp_dict["preproc_bold"]
+    anat_mask = fp_dict["mask_anat"]
 
+    # Temporal filter and mask both preproc and aroma files
     # TODO refactor for job parallelization
-    for run_preproc, run_mask in zip(run_preproc_list, run_mask_list):
-
-        # Check runs are same
-        epi_run_num = run_preproc.split("run-")[1].split("_")[0]
-        mask_run_num = run_mask.split("run-")[1].split("_")[0]
-        if epi_run_num != mask_run_num:
-            raise NameError(
-                "Runs misalgined in dictionary,"
-                + f" for files {run_preproc} and {run_mask}."
-                + " Check preprocessing.fmriprep return."
-            )
+    for run_preproc in itertools.chain(run_preproc_bold, run_aroma_bold):
 
         # Setup output location
         sess = "ses-" + run_preproc.split("ses-")[1].split("/")[0]
@@ -397,10 +417,18 @@ def fsl_preproc(work_fsl, fp_dict, sing_afni, subj, log_dir):
         if not os.path.exists(out_dir):
             os.makedirs(out_dir)
 
+        # Set description based off aroma/preproc
+        h_desc = (
+            "tfiltAROMAMasked"
+            if "smoothAROMA" in run_preproc
+            else "tfiltMasked"
+        )
+        print(f"run_preproc : {run_preproc}\nh_desc : {h_desc}")
+
         # Avoid repeating work
         run_tfilt_masked = (
             os.path.basename(run_preproc).split("desc-")[0]
-            + "desc-tfiltMasked_bold.nii.gz"
+            + f"desc-{h_desc}_bold.nii.gz"
         )
         if os.path.exists(f"{out_dir}/{run_tfilt_masked}"):
             continue
@@ -414,18 +442,19 @@ def fsl_preproc(work_fsl, fp_dict, sing_afni, subj, log_dir):
             _temporal_filt(run_preproc, out_dir, run_tfilt, subj, log_dir)
 
         # Apply mask
-        _apply_mask(
+        _apply_brain_mask(
             sing_afni,
             out_dir,
             run_tfilt_masked,
             run_tfilt,
-            run_mask,
+            anat_mask,
             subj,
             log_dir,
         )
 
-    fsl_files = glob.glob(
-        f"{work_fsl}/{subj}/**/*desc-tfiltMasked_bold.nii.gz", recursive=True
+    denoise_files = glob.glob(
+        f"{work_fsl}/{subj}/**/*desc-tfilt*Masked_bold.nii.gz", recursive=True
     )
-    if len(fsl_files) != len(run_preproc_list):
-        raise FileNotFoundError(f"Missing filtered + masked file for {subj}.")
+    if len(denoise_files) != (len(run_aroma_bold) + len(run_preproc_bold)):
+        raise FileNotFoundError(f"Missing tfiltMasked files for {subj}.")
+    return denoise_files
