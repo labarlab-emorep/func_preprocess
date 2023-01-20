@@ -44,6 +44,7 @@ def sbatch(
     -----
     Avoid using double quotes in <bash_cmd> (particularly relevant
     with AFNI) to avoid conflict with --wrap syntax.
+
     """
     sbatch_cmd = f"""
         sbatch \
@@ -113,6 +114,7 @@ def schedule_subj(
     tuple
         [0] subprocess stdout
         [1] subprocess stderr
+
     """
     # Setup software derivatives dirs, for working
     work_fp = os.path.join(work_deriv, "fmriprep")

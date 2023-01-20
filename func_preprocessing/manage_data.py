@@ -22,6 +22,7 @@ def copy_clean(proj_deriv, work_deriv, subj):
         /work/foo/EmoRep_BIDS/derivatives
     subj : str
         BIDS subject
+
     """
     # Clean FSL files
     print("\n\tCleaning FSL files ...")

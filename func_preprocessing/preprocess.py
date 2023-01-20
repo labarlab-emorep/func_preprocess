@@ -2,6 +2,7 @@
 
 FreeSurfer (deprecated), fMRIPrep, FSL, and AFNI
 software used for preprocessing EmoRep data.
+
 """
 # %%
 import os
@@ -14,10 +15,10 @@ from func_preprocessing import submit
 def freesurfer(work_fs, subj_t1, subj, sess, log_dir):
     """Submit FreeSurfer for subject's session.
 
+    DEPRECATED
+
     Convert T1w NIfTI into Analyze format with FreeSurfer
     directory organization. Run FreeSurfer.
-
-    Deprecated.
 
     Parameters
     ----------
@@ -36,6 +37,7 @@ def freesurfer(work_fs, subj_t1, subj, sess, log_dir):
     -------
     bool
         Whether FreeSurfer derivatives exist
+
     """
     fs_files = glob.glob(f"{work_fs}/**/aparc.a2009s+aseg.mgz", recursive=True)
     if not fs_files:
@@ -109,6 +111,7 @@ def fmriprep(
         <subj>.html missing
         Different lengths of dict["aroma_bold"] and dict["mask_bold"]
         AROMA or mask files not detected
+
     """
 
     # Setup fmriprep specific dir/paths, parent directory
@@ -236,6 +239,7 @@ def _temporal_filt(run_preproc, out_dir, run_tfilt, subj, log_dir):
     Notes
     -----
     Writes <out_dir>/<run_tfilt>.
+
     """
     run_tmean = run_tfilt.split("desc-")[0] + "desc-tmean_bold.nii.gz"
     bash_cmd = f"""
@@ -302,6 +306,7 @@ def _apply_mask(
     Notes
     -----
     Writes <out_dir>/<run_tfilt_masked>.
+
     """
     run_mask_name = os.path.basename(run_mask)
     bash_cmd = f"""
@@ -367,6 +372,7 @@ def fsl_preproc(work_fsl, fp_dict, sing_afni, subj, log_dir):
         When preprocess EPI and mask have misaligned runs in dictionary
     FileNotFoundError
         When not all bold runs have a corresponding masked temporal filter file
+
     """
     # Unpack dict for readability
     run_preproc_list = fp_dict["aroma_bold"]
