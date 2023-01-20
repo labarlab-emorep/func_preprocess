@@ -1,27 +1,43 @@
 r"""Conduct preprocessing for EmoRep.
 
 Run data through FreeSurfer and fMRIPrep, then conduct temporal
-filtering via FSL and AFNI. Work is conducted in
-"/work/$(whoami)/EmoRep_BIDS/derivatives", and final files are saved
-to "<proj_dir>/derivatives/<fmriprep|fsl>/<subj>".
+filtering via FSL and AFNI. Unless otherwise specified via --work-dir,
+work is conducted in:
+    /work/<whoami>/EmoRep/pre_processing
+
+Final files are saved to:
+    <proj-dir>/derivatives/pre_processing/[fmriprep | freesurfer | fsl_denoise]
 
 For each subject, a parent job "p<subj>" is submitted that controls
-the pipeline. Named subprocess "<subj>foo>" are spawned when
+the workflow. Named subprocess "<subj>foo>" are spawned when
 additional resources are required.
 
 Log files and scripts written to:
-    "/work/$(whoami)/EmoRep_BIDS/derivatives/logs/func_pp_<timestamp>"
+    /work/<whoami>/EmoRep/pre_processing/logs/func_pp_<timestamp>
+
+Requires environmental variables SING_AFNI, SING_FMRIPREP, and FS_LICENSE
+from the "emorep" project environment to supply paths to singularity images
+of AFNI, fMRIPrep, and a FreeSurfer license. The directory containting
+FS_LICENSE must also contain templateflow.
 
 Examples
 --------
 func_preprocessing -s sub-ER0009
 
+func_preprocessing -s sub-ER0009 sub-ER0010
+
 func_preprocessing \
     -s sub-ER0009 sub-ER0010 \
     --proj-dir /hpc/group/labarlab/foo \
     --ignore-fmaps
+
+func_preprocessing \
+    -s sub-ER0009 \
+    --no-freesurfer \
+    --fd-thresh 0.2 \
+    --work-dir /work/foo/test_dir
+
 """
-# %%
 import os
 import sys
 import time
@@ -31,7 +47,6 @@ from argparse import ArgumentParser, RawTextHelpFormatter
 from func_preprocessing import submit
 
 
-# %%fnma
 def _get_args():
     """Get and parse arguments."""
     parser = ArgumentParser(
@@ -59,12 +74,36 @@ def _get_args():
         ),
     )
     parser.add_argument(
+        "--no-freesurfer",
+        action="store_true",
+        help=textwrap.dedent(
+            """\
+            Whether to use the --fs-no-reconall option with fmriprep,
+            True if "--no--freesurfer" else False
+            """
+        ),
+    )
+    parser.add_argument(
         "--proj-dir",
         type=str,
-        default="/hpc/group/labarlab/EmoRep_BIDS",
+        default="/hpc/group/labarlab/EmoRep/Exp2_Compute_Emotion/data_scanner_BIDS",
         help=textwrap.dedent(
             """\
             Path to BIDS-formatted project directory
+            (default : %(default)s)
+            """
+        ),
+    )
+    parser.add_argument(
+        "--work-dir",
+        type=str,
+        default=None,
+        help=textwrap.dedent(
+            """\
+            Path to derivatives location on work partition, for processing
+            intermediates. If --work-dir is unspecified, the work-dir will
+            setup in /work/<user>/EmoRep/derivatives. Be mindful of path
+            lengths to avoid a buffer overflow in FreeSurfer.
             (default : %(default)s)
             """
         ),
@@ -78,7 +117,7 @@ def _get_args():
         help=textwrap.dedent(
             """\
             List of subject IDs to submit for pre-processing,
-            e.g. "-s ER4414" or "--sub-list ER4414 ER4415 ER4416".
+            e.g. "-s sub-ER4414" or "--sub-list sub-ER4414 sub-ER4415"
             """
         ),
         type=str,
@@ -100,12 +139,14 @@ def main():
     args = _get_args().parse_args()
     subj_list = args.sub_list
     proj_dir = args.proj_dir
+    work_deriv = args.work_dir
     ignore_fmaps = args.ignore_fmaps
+    no_freesurfer = args.no_freesurfer
     fd_thresh = args.fd_thresh
 
     # Setup group project directory, paths
     proj_raw = os.path.join(proj_dir, "rawdata")
-    proj_deriv = os.path.join(proj_dir, "derivatives")
+    proj_deriv = os.path.join(proj_dir, "derivatives/pre_processing")
 
     # Get environmental vars
     sing_afni = os.environ["SING_AFNI"]
@@ -113,12 +154,27 @@ def main():
     user_name = os.environ["USER"]
     fs_license = os.environ["FS_LICENSE"]
 
+    # Check for required files, directories research_bin
+    research_dir = os.path.dirname(fs_license)
+    research_contents = [x for x in os.listdir(research_dir)]
+    req_contents = ["templateflow", "license.txt"]
+    for check in req_contents:
+        if check not in research_contents:
+            raise FileNotFoundError(
+                f"Expected to find {check} in {research_dir}."
+            )
+
     # Setup work directory, for intermediates
-    proj_name = os.path.basename(proj_dir)
-    work_deriv = os.path.join("/work", user_name, proj_name, "derivatives")
+    if not work_deriv:
+        work_deriv = os.path.join(
+            "/work",
+            user_name,
+            "EmoRep/pre_processing",
+        )
     now_time = datetime.now()
     log_dir = os.path.join(
-        work_deriv, f"logs/func_pp_{now_time.strftime('%y-%m-%d_%H:%M')}"
+        os.path.dirname(work_deriv),
+        f"logs/func_pp_{now_time.strftime('%y-%m-%d_%H:%M')}",
     )
     if not os.path.exists(log_dir):
         os.makedirs(log_dir)
@@ -134,6 +190,7 @@ def main():
             fs_license,
             fd_thresh,
             ignore_fmaps,
+            no_freesurfer,
             sing_afni,
             log_dir,
         )
