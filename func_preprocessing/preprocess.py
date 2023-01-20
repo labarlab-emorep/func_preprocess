@@ -2,6 +2,7 @@
 
 FreeSurfer (deprecated), fMRIPrep, FSL, and AFNI
 software used for preprocessing EmoRep data.
+
 """
 # %%
 import os
@@ -15,10 +16,10 @@ from func_preprocessing import submit
 def freesurfer(work_fs, subj_t1, subj, sess, log_dir):
     """Submit FreeSurfer for subject's session.
 
+    DEPRECATED
+
     Convert T1w NIfTI into Analyze format with FreeSurfer
     directory organization. Run FreeSurfer.
-
-    Deprecated.
 
     Parameters
     ----------
@@ -114,9 +115,8 @@ def fmriprep(
     ------
     FileNotFoundError
         <subj>.html missing
-        Different lengths of dict["aroma_bold"], dict["preproc_bold"],
-            and dict["mask_bold"]
-        Preproc, AROMA, or mask files not detected
+        Different lengths of dict["aroma_bold"] and dict["mask_bold"]
+        AROMA or mask files not detected
 
     """
 
