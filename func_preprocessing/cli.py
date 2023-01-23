@@ -163,7 +163,7 @@ def main():
     # Check run_local, work_deriv, and proj_dir. Set paths.
     if run_local and not work_deriv:
         raise ValueError("Option --work-deriv required with --run-local.")
-    if not os.path.exists(work_deriv):
+    if run_local and not os.path.exists(work_deriv):
         raise FileNotFoundError(f"Expected to find directory : {work_deriv}")
     if not os.path.exists(proj_dir):
         raise FileNotFoundError(f"Expected to find directory : {proj_dir}")

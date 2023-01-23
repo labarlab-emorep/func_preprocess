@@ -158,12 +158,12 @@ def schedule_subj(
             "{work_deriv}",
             "{sing_fmriprep}",
             "{fs_license}",
-            "{fd_thresh}",
-            "{ignore_fmaps}",
-            "{no_freesurfer}",
+            {fd_thresh},
+            {ignore_fmaps},
+            {no_freesurfer},
             "{sing_afni}",
             "{log_dir}",
-            "{run_local}",
+            {run_local},
         )
 
     """

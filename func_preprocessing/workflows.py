@@ -53,7 +53,22 @@ def run_preproc(
     -------
     None
 
+    Raises
+    ------
+    TypeError
+        Unexpected types for bool and float args
+
     """
+    # Check types
+    for _chk_bool in [ignore_fmaps, no_freesurfer, run_local]:
+        if not isinstance(_chk_bool, bool):
+            raise TypeError(
+                "Expected bool type for options : --ignore_fmaps, "
+                + "--no_freesurfer, --run_local"
+            )
+    if not isinstance(fd_thresh, float):
+        raise TypeError("Expected float type for --fd_thresh")
+
     # Setup software derivatives dirs, for working
     work_fp = os.path.join(work_deriv, "fmriprep")
     work_fs = os.path.join(work_deriv, "freesurfer")

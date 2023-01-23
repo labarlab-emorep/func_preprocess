@@ -169,7 +169,7 @@ def fmriprep(
 
         # Submit fmriprep call
         bash_cmd = " ".join(bash_list)
-        _, _ = submit.submit_subprocess(
+        std_out, std_err = submit.submit_subprocess(
             run_local,
             bash_cmd,
             f"{subj[7:]}_fmriprep",
@@ -181,6 +181,7 @@ def fmriprep(
 
         # Check for output
         if not os.path.exists(check_file):
+            print(f"\nstdout : {std_out}\nstderr : {std_err}")
             raise FileNotFoundError(
                 f"FMRIPrep output file {subj}.html not found."
             )
