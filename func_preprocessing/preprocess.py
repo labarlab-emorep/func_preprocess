@@ -388,13 +388,20 @@ def fsl_preproc(work_fsl, fp_dict, sing_afni, subj, log_dir, run_local):
             if not os.path.exists(f"{out_dir}/{run_tfilt}"):
                 _temporal_filt(run_epi, out_dir, run_tfilt)
 
-            # Apply mask
+            # Apply mask, clean
             _apply_brain_mask(
                 out_dir,
                 run_tfilt_masked,
                 run_tfilt,
                 run_mask,
             )
+            remove_files = [
+                f"{out_dir}/{x}"
+                for x in os.listdir(out_dir)
+                if not fnmatch(x, "*Masked_bold.nii.gz")
+            ]
+            for rm_file in remove_files:
+                os.remove(rm_file)
 
     denoise_files = glob.glob(
         f"{work_fsl}/{subj}/**/*desc-tfilt*Masked_bold.nii.gz", recursive=True
@@ -426,23 +433,9 @@ def copy_clean(proj_deriv, work_deriv, subj, no_freesurfer, log_dir):
         Whether to use the --fs-no-reconall option
 
     """
-    # Clean FSL files
-    print("\n\tCleaning FSL files ...")
-    work_fsl_subj = os.path.join(work_deriv, "fsl_denoise", subj)
-    nii_list = sorted(
-        glob.glob(f"{work_fsl_subj}/**/*.nii.gz", recursive=True)
-    )
-    remove_fsl = [
-        x
-        for x in nii_list
-        if not fnmatch(x, "*Masked_bold.nii.gz")
-        and not fnmatch(x, "*res-2*_bold.nii.gz")
-    ]
-    for rm_file in remove_fsl:
-        os.remove(rm_file)
-
     # Copy remaining FSL files to proj_deriv, use faster bash
     print("\n\tCopying fsl_denoise files ...")
+    work_fsl_subj = os.path.join(work_deriv, "fsl_denoise", subj)
     proj_fsl_subj = os.path.join(proj_deriv, "fsl_denoise", subj)
     cp_cmd = f"cp -r {work_fsl_subj} {proj_fsl_subj}"
     _, _ = submit.submit_subprocess(True, cp_cmd, f"{subj[7:]}_cp", log_dir)
