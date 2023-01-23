@@ -8,7 +8,7 @@ software used for preprocessing EmoRep data.
 import os
 import glob
 import shutil
-import itertools
+from fnmatch import fnmatch
 from func_preprocessing import submit
 
 
@@ -75,6 +75,7 @@ def fmriprep(
     ignore_fmaps,
     no_freesurfer,
     log_dir,
+    run_local,
 ):
     """Run fMRIPrep for single subject.
 
@@ -102,6 +103,8 @@ def fmriprep(
         Whether to use the --fs-no-reconall option
     log_dir : path
         Location of directory to capture logs
+    run_local : bool
+        Whether job, subprocesses are run locally
 
     Returns
     -------
@@ -166,7 +169,8 @@ def fmriprep(
 
         # Submit fmriprep call
         bash_cmd = " ".join(bash_list)
-        _, _ = submit.sbatch(
+        _, _ = submit.submit_subprocess(
+            run_local,
             bash_cmd,
             f"{subj[7:]}_fmriprep",
             log_dir,
@@ -235,140 +239,7 @@ def fmriprep(
 
 
 # %%
-def _temporal_filt(run_preproc, out_dir, run_tfilt, subj, log_dir):
-    """Temporally filter data with FSL.
-
-    Filter data for specific subject, session, run.
-
-    Parameters
-    ----------
-    run_preproc : path, str
-        Location of fmriprep preprocessed bold file
-    out_dir : path
-        Location of derivatives, e.g.
-        /work/foo/EmoRep_BIDS/derivatives/fsl/sub/sess/func
-    run_tfilt : str
-        File name of temporally filtered bold, will be made
-    subj : str
-        BIDS subject
-    log_dir : path
-        Location of directory to capture logs
-
-    Returns
-    -------
-    None
-
-    Raises
-    ------
-    FileNotFoundError
-        If <out_dir>/<run_tfilt> not detected.
-
-    Notes
-    -----
-    Writes <out_dir>/<run_tfilt>.
-
-    """
-    run_tmean = run_tfilt.split("desc-")[0] + "desc-tmean_bold.nii.gz"
-    bash_cmd = f"""
-        fslmaths \
-            {run_preproc} \
-            -Tmean \
-            {out_dir}/{run_tmean}
-
-        fslmaths \
-            {run_preproc} \
-            -bptf 25 -1 \
-            -add {out_dir}/{run_tmean} \
-            {out_dir}/{run_tfilt}
-    """
-    _, _ = submit.sbatch(
-        bash_cmd,
-        f"{subj[7:]}_tempfilt",
-        log_dir,
-        mem_gig=6,
-    )
-
-    # Check for output
-    if not os.path.exists(f"{out_dir}/{run_tfilt}"):
-        raise FileNotFoundError(
-            f"Failed to make temporal filter file for {subj}."
-        )
-
-
-def _apply_brain_mask(
-    sing_afni, out_dir, run_tfilt_masked, run_tfilt, brain_mask, subj, log_dir
-):
-    """Mask temporally filtered data with AFNI.
-
-    Mask data for specific subject, session, run.
-
-    Parameters
-    ----------
-    sing_afni : path, str
-        Location, file of afni singularity image
-    out_dir : path
-        Location of derivatives, e.g.
-        /work/foo/EmoRep_BIDS/derivatives/fsl/sub/sess/func
-    run_tfilt_masked : str
-        File name of masked, temporally filtered bold,
-        will be made.
-    run_tfilt : str
-        File name of temporally filtered bold
-    brain_mask : str
-        Location, file name of brain mask
-    subj : str
-        BIDS subject
-    log_dir : path
-        Location of directory to capture logs
-
-    Returns
-    -------
-    None
-
-    Raises
-    ------
-    FileNotFoundError
-        If <out_dir>/<run_tfilt_masked> not detected.
-
-    Notes
-    -----
-    Writes <out_dir>/<run_tfilt_masked>.
-
-    """
-    brain_mask_name = os.path.basename(brain_mask)
-    bash_cmd = f"""
-        cp {brain_mask} {out_dir}/{brain_mask_name}
-
-        singularity run \\
-        --cleanenv \\
-        --bind {out_dir}:{out_dir} \\
-        --bind {out_dir}:/opt/home \\
-        {sing_afni} \\
-        3dcalc \\
-            -a {out_dir}/{run_tfilt} \\
-            -b {out_dir}/{brain_mask_name} \\
-            -float \\
-            -prefix {out_dir}/{run_tfilt_masked} \\
-            -expr 'a*b'
-
-        rm {out_dir}/{brain_mask_name}
-    """
-    _, _ = submit.sbatch(
-        bash_cmd,
-        f"{subj[7:]}_tempmask",
-        log_dir,
-    )
-    # Check for output
-    if not os.path.exists(f"{out_dir}/{run_tfilt_masked}"):
-        raise FileNotFoundError(
-            f"Failed to make masked temporal filter file for {subj}."
-            + "Check preprocessing._apply_mask, preprocessing._temporal_filt,"
-            + " or preprocessing.fsl_preproc."
-        )
-
-
-# %%
-def fsl_preproc(work_fsl, fp_dict, sing_afni, subj, log_dir):
+def fsl_preproc(work_fsl, fp_dict, sing_afni, subj, log_dir, run_local):
     """Conduct extra preprocessing via FSL and AFNI.
 
     Temporally filter BOLD data and then multiply with
@@ -381,13 +252,18 @@ def fsl_preproc(work_fsl, fp_dict, sing_afni, subj, log_dir):
         /work/foo/EmoRep_BIDS/derivatives/fsl
     fp_dict : dict
         Returned from preprocessing.fmriprep, contains
-        paths to preprocessed BOLD and mask files.
+        paths to preprocessed BOLD and mask files. Required keys:
+        -   [aroma_bold] = list, paths to fmriprep aroma run output
+        -   [preproc_bold] = list, paths to fmriprep preproc run output
+        -   [mask_bold] = list, paths to fmriprep preproc run masks
     sing_afni : path, str
         Location of afni singularity image
     subj : str
         BIDS subject
     log_dir : path
         Location of directory to capture logs
+    run_local : bool
+        Whether job, subprocesses are run locally
 
     Returns
     -------
@@ -397,64 +273,197 @@ def fsl_preproc(work_fsl, fp_dict, sing_afni, subj, log_dir):
     Raises
     ------
     NameError
-        When preprocess EPI and mask have misaligned runs in dictionary
+        Preprocess EPI and mask have misaligned runs in dictionary
     FileNotFoundError
-        When not all bold runs have a corresponding masked temporal filter file
+        Not all bold runs have a corresponding masked temporal filter file
+    KeyError
+        Missing required key in fp_dict
 
     """
-    # Unpack dict for readability
-    run_aroma_bold = fp_dict["aroma_bold"]
-    run_preproc_bold = fp_dict["preproc_bold"]
-    anat_mask = fp_dict["mask_anat"]
 
-    # Temporal filter and mask both preproc and aroma files
-    # TODO refactor for job parallelization
-    for run_preproc in itertools.chain(run_preproc_bold, run_aroma_bold):
+    # Set inner functions
+    def _temporal_filt(
+        run_preproc: str, out_dir: str, run_tfilt: str, bptf: int = 25
+    ) -> None:
+        """Temporally filter data with FSL."""
+        print(f"Temporally filtering file : {run_preproc}")
+        run_tmean = run_tfilt.split("desc-")[0] + "desc-tmean_bold.nii.gz"
+        bash_cmd = f"""
+            fslmaths \
+                {run_preproc} \
+                -Tmean \
+                {out_dir}/{run_tmean}
 
-        # Setup output location
-        sess = "ses-" + run_preproc.split("ses-")[1].split("/")[0]
-        out_dir = os.path.join(work_fsl, subj, sess, "func")
-        if not os.path.exists(out_dir):
-            os.makedirs(out_dir)
-
-        # Set description based off aroma/preproc
-        h_desc = (
-            "tfiltAROMAMasked"
-            if "smoothAROMA" in run_preproc
-            else "tfiltMasked"
+            fslmaths \
+                {run_preproc} \
+                -bptf {bptf} -1 \
+                -add {out_dir}/{run_tmean} \
+                {out_dir}/{run_tfilt}
+        """
+        _, _ = submit.submit_subprocess(
+            run_local,
+            bash_cmd,
+            f"{subj[7:]}_tempfilt",
+            log_dir,
+            mem_gig=6,
         )
-        print(f"run_preproc : {run_preproc}\nh_desc : {h_desc}")
+        chk_path = os.path.join(out_dir, run_tfilt)
+        if not os.path.exists(chk_path):
+            raise FileNotFoundError(f"Failed to find : {chk_path}")
 
-        # Avoid repeating work
-        run_tfilt_masked = (
-            os.path.basename(run_preproc).split("desc-")[0]
-            + f"desc-{h_desc}_bold.nii.gz"
-        )
-        if os.path.exists(f"{out_dir}/{run_tfilt_masked}"):
-            continue
+    def _apply_brain_mask(
+        out_dir: str,
+        run_tfilt_masked: str,
+        run_tfilt: str,
+        brain_mask: str,
+    ) -> None:
+        """Mask temporally filtered data with AFNI."""
+        brain_mask_name = os.path.basename(brain_mask)
+        print(f"Masing file : {run_tfilt}")
+        bash_cmd = f"""
+            cp {brain_mask} {out_dir}/{brain_mask_name}
 
-        # Apply temporal filter
-        run_tfilt = (
-            os.path.basename(run_preproc).split("desc-")[0]
-            + "desc-tfilt_bold.nii.gz"
-        )
-        if not os.path.exists(f"{out_dir}/{run_tfilt}"):
-            _temporal_filt(run_preproc, out_dir, run_tfilt, subj, log_dir)
-
-        # Apply mask
-        _apply_brain_mask(
-            sing_afni,
-            out_dir,
-            run_tfilt_masked,
-            run_tfilt,
-            anat_mask,
-            subj,
+            singularity run \\
+            --cleanenv \\
+            --bind {out_dir}:{out_dir} \\
+            --bind {out_dir}:/opt/home \\
+            {sing_afni} \\
+            3dcalc \\
+                -a {out_dir}/{run_tfilt} \\
+                -b {out_dir}/{brain_mask_name} \\
+                -float \\
+                -prefix {out_dir}/{run_tfilt_masked} \\
+                -expr 'a*b'
+        """
+        _, _ = submit.submit_subprocess(
+            run_local,
+            bash_cmd,
+            f"{subj[7:]}_tempmask",
             log_dir,
         )
+        # Check for output
+        chk_path = os.path.join(out_dir, run_tfilt_masked)
+        if not os.path.exists(chk_path):
+            raise FileNotFoundError(f"Failed to find : {chk_path}")
+
+    # Check for required fmriprep keys
+    req_keys = ["aroma_bold", "preproc_bold", "mask_bold"]
+    for _key in req_keys:
+        if _key not in fp_dict.keys():
+            raise KeyError(f"Expected key in fp_dict : {_key}")
+
+    # Temporal filter and mask both preproc and aroma files
+    for cnt, run_mask in enumerate(fp_dict["mask_bold"]):
+        run_preproc = fp_dict["preproc_bold"][cnt]
+        run_aroma = fp_dict["aroma_bold"][cnt]
+        for run_epi in [run_preproc, run_aroma]:
+
+            # Setup output location
+            sess = "ses-" + run_epi.split("ses-")[1].split("/")[0]
+            out_dir = os.path.join(work_fsl, subj, sess, "func")
+            if not os.path.exists(out_dir):
+                os.makedirs(out_dir)
+
+            # Set description based off aroma/preproc
+            h_desc = (
+                "tfiltAROMAMasked"
+                if "smoothAROMA" in run_epi
+                else "tfiltMasked"
+            )
+
+            # Avoid repeating work
+            run_tfilt_masked = (
+                os.path.basename(run_epi).split("desc-")[0]
+                + f"desc-{h_desc}_bold.nii.gz"
+            )
+            if os.path.exists(f"{out_dir}/{run_tfilt_masked}"):
+                continue
+
+            # Apply temporal filter
+            run_tfilt = (
+                os.path.basename(run_epi).split("desc-")[0]
+                + "desc-tfilt_bold.nii.gz"
+            )
+            if not os.path.exists(f"{out_dir}/{run_tfilt}"):
+                _temporal_filt(run_epi, out_dir, run_tfilt)
+
+            # Apply mask
+            _apply_brain_mask(
+                out_dir,
+                run_tfilt_masked,
+                run_tfilt,
+                run_mask,
+            )
 
     denoise_files = glob.glob(
         f"{work_fsl}/{subj}/**/*desc-tfilt*Masked_bold.nii.gz", recursive=True
     )
-    if len(denoise_files) != (len(run_aroma_bold) + len(run_preproc_bold)):
+    if len(denoise_files) != (
+        len(fp_dict["preproc_bold"]) + len(fp_dict["armoa_bold"])
+    ):
         raise FileNotFoundError(f"Missing tfiltMasked files for {subj}.")
     return denoise_files
+
+
+def copy_clean(proj_deriv, work_deriv, subj, no_freesurfer, log_dir):
+    """Housekeeping for data.
+
+    Delete unneeded files from work_deriv, copy remaining to
+    the proj_deriv location.
+
+    Parameters
+    ----------
+    proj_deriv : path
+        Project derivative location, e.g.
+        /hpc/group/labarlab/EmoRep_BIDS/derivatives
+    work_deirv : path
+        Working derivative location, e.g.
+        /work/foo/EmoRep_BIDS/derivatives
+    subj : str
+        BIDS subject
+    no_freesurfer : bool
+        Whether to use the --fs-no-reconall option
+
+    """
+    # Clean FSL files
+    print("\n\tCleaning FSL files ...")
+    work_fsl_subj = os.path.join(work_deriv, "fsl_denoise", subj)
+    nii_list = sorted(
+        glob.glob(f"{work_fsl_subj}/**/*.nii.gz", recursive=True)
+    )
+    remove_fsl = [
+        x
+        for x in nii_list
+        if not fnmatch(x, "*Masked_bold.nii.gz")
+        and not fnmatch(x, "*res-2*_bold.nii.gz")
+    ]
+    for rm_file in remove_fsl:
+        os.remove(rm_file)
+
+    # Copy remaining FSL files to proj_deriv, use faster bash
+    print("\n\tCopying fsl_denoise files ...")
+    proj_fsl_subj = os.path.join(proj_deriv, "fsl_denoise", subj)
+    cp_cmd = f"cp -r {work_fsl_subj} {proj_fsl_subj}"
+    _, _ = submit.submit_subprocess(True, cp_cmd, f"{subj[7:]}_cp", log_dir)
+
+    # Copy fMRIPrep files, reflect freesurfer choice
+    print("\n\tCopying fMRIPrep files ...")
+    work_fp_subj = os.path.join(work_deriv, "fmriprep", subj)
+    work_fp = os.path.dirname(work_fp_subj)
+    proj_fp = os.path.join(proj_deriv, "fmriprep")
+    keep_fmriprep = [
+        f"{subj}.html",
+    ]
+    if not no_freesurfer:
+        keep_fmriprep.append("desc-aparcaseg_dseg.tsv")
+        keep_fmriprep.append("desc-aseg_dseg.tsv")
+    for kp_file in keep_fmriprep:
+        shutil.copyfile(f"{work_fp}/{kp_file}", f"{proj_fp}/{kp_file}")
+
+    proj_fp_subj = os.path.join(proj_fp, subj)
+    cp_cmd = f"cp -r {work_fp_subj} {proj_fp_subj}"
+    _, _ = submit.submit_subprocess(True, cp_cmd, f"{subj[7:]}_cp", log_dir)
+
+    # Turn out the lights
+    shutil.rmtree(work_fp_subj)
+    shutil.rmtree(work_fsl_subj)

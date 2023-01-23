@@ -1,11 +1,11 @@
 """Methods for controlling sbatch and subprocess submissions."""
-import os
 import sys
 import subprocess
 import textwrap
 
 
-def sbatch(
+def submit_subprocess(
+    run_local,
     bash_cmd,
     job_name,
     log_dir,
@@ -14,23 +14,28 @@ def sbatch(
     mem_gig=4,
     env_input=None,
 ):
-    """Schedule child SBATCH job.
+    """Run bash commands as subprocesses.
+
+    Schedule a SBATCH subprocess when run_local=True, otherwise
+    submit normal subprocess.
 
     Parameters
     ----------
+    run_local : bool
+        Whether to run job locally
     bash_cmd : str
         Bash syntax, work to schedule
     job_name : str
         Name for scheduler
     log_dir : Path
         Location of output dir for writing logs
-    num_hours : int
+    num_hours : int, optional
         Walltime to schedule
-    num_cpus : int
+    num_cpus : int, optional
         Number of CPUs required by job
-    mem_gig : int
+    mem_gig : int, optional
         Job RAM requirement for each CPU (GB)
-    env_input : dict, None
+    env_input : dict, optional
         Extra environmental variables required by processes
         e.g. singularity reqs
 
@@ -46,24 +51,38 @@ def sbatch(
     with AFNI) to avoid conflict with --wrap syntax.
 
     """
-    sbatch_cmd = f"""
-        sbatch \
-        -J {job_name} \
-        -t {num_hours}:00:00 \
-        --cpus-per-task={num_cpus} \
-        --mem-per-cpu={mem_gig}000 \
-        -o {log_dir}/out_{job_name}.log \
-        -e {log_dir}/err_{job_name}.log \
-        --wait \
-        --wrap="{bash_cmd}"
-    """
-    print(f"Submitting SBATCH job:\n\t{sbatch_cmd}\n")
-    h_sp = subprocess.Popen(
-        sbatch_cmd, shell=True, stdout=subprocess.PIPE, env=env_input
-    )
-    h_out, h_err = h_sp.communicate()
-    h_sp.wait()
-    return (h_out, h_err)
+
+    def _bash_sp(job_cmd: str) -> tuple:
+        """Submit bash as subprocess."""
+        job_sp = subprocess.Popen(
+            job_cmd, shell=True, stdout=subprocess.PIPE, env=env_input
+        )
+        job_out, job_err = job_sp.communicate()
+        job_sp.wait()
+        return (job_out, job_err)
+
+    def _write_sbatch(job_cmd: str) -> tuple:
+        """Schedule child SBATCH job."""
+        sbatch_cmd = f"""
+            sbatch \
+            -J {job_name} \
+            -t {num_hours}:00:00 \
+            --cpus-per-task={num_cpus} \
+            --mem-per-cpu={mem_gig}000 \
+            -o {log_dir}/out_{job_name}.log \
+            -e {log_dir}/err_{job_name}.log \
+            --wait \
+            --wrap="{job_cmd}"
+        """
+        print(f"Submitting SBATCH job:\n\t{sbatch_cmd}\n")
+        job_out, job_err = _bash_sp(sbatch_cmd)
+        return (job_out, job_err)
+
+    if run_local:
+        job_out, job_err = _bash_sp(bash_cmd)
+    else:
+        job_out, job_err = _write_sbatch(bash_cmd)
+    return (job_out, job_err)
 
 
 def schedule_subj(
@@ -78,11 +97,12 @@ def schedule_subj(
     no_freesurfer,
     sing_afni,
     log_dir,
+    run_local,
 ):
-    """Write and schedule pipeline.
+    """Schedule pipeline on compute cluster.
 
-    Generate a python script that controls preprocessing. Submit
-    the work on schedule resources.
+    Generate a python script that runs preprocessing workflow.
+    Submit the work on schedule resources.
 
     Parameters
     ----------
@@ -111,30 +131,14 @@ def schedule_subj(
         Location of afni singularity iamge
     log_dir : path
         Location for writing logs
+    run_local : bool
+        Whether job, subprocesses are run locally
 
     Returns
     -------
-    tuple
-        [0] subprocess stdout
-        [1] subprocess stderr
+    None
 
     """
-    # Setup software derivatives dirs, for working
-    work_fp = os.path.join(work_deriv, "fmriprep")
-    work_fs = os.path.join(work_deriv, "freesurfer")
-    work_fsl = os.path.join(work_deriv, "fsl_denoise")
-    for h_dir in [work_fp, work_fs, work_fsl]:
-        if not os.path.exists(h_dir):
-            os.makedirs(h_dir)
-
-    # Setup software derivatives dirs, for storage
-    proj_fp = os.path.join(proj_deriv, "fmriprep")
-    proj_fsl = os.path.join(proj_deriv, "fsl_denoise")
-    for h_dir in [proj_fp, proj_fsl]:
-        if not os.path.exists(h_dir):
-            os.makedirs(h_dir)
-
-    # Write parent python script
     sbatch_cmd = f"""\
         #!/bin/env {sys.executable}
 
@@ -145,38 +149,22 @@ def schedule_subj(
 
         import os
         import sys
-        from func_preprocessing import preprocess, manage_data
+        from func_preprocessing import workflows
 
-        # Run fMRIPrep
-        fp_dict = preprocess.fmriprep(
+        workflows.run_preproc(
             "{subj}",
             "{proj_raw}",
+            "{proj_deriv}",
             "{work_deriv}",
             "{sing_fmriprep}",
             "{fs_license}",
-            {fd_thresh},
-            {ignore_fmaps},
-            {no_freesurfer},
-            "{log_dir}",
-        )
-
-        # Finish preprocessing with FSL, AFNI
-        denoise_files = preprocess.fsl_preproc(
-            "{work_fsl}",
-            fp_dict,
+            "{fd_thresh}",
+            "{ignore_fmaps}",
+            "{no_freesurfer}",
             "{sing_afni}",
-            "{subj}",
             "{log_dir}",
+            "{run_local}",
         )
-
-        # Clean up
-        if denoise_files:
-            manage_data.copy_clean(
-                "{proj_deriv}",
-                "{work_deriv}",
-                "{subj}",
-                {no_freesurfer},
-            )
 
     """
     sbatch_cmd = textwrap.dedent(sbatch_cmd)
@@ -190,4 +178,3 @@ def schedule_subj(
     )
     h_out, h_err = h_sp.communicate()
     print(f"{h_out.decode('utf-8')}\tfor {subj}")
-    return (h_out, h_err)
