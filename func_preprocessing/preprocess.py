@@ -319,7 +319,7 @@ def fsl_preproc(work_fsl, fp_dict, sing_afni, subj, log_dir, run_local):
     ) -> None:
         """Mask temporally filtered data with AFNI."""
         brain_mask_name = os.path.basename(brain_mask)
-        print(f"Masing file : {run_tfilt}")
+        print(f"Masking file : {run_tfilt}")
         bash_cmd = f"""
             cp {brain_mask} {out_dir}/{brain_mask_name}
 
