@@ -407,7 +407,7 @@ def fsl_preproc(work_fsl, fp_dict, sing_afni, subj, log_dir, run_local):
         f"{work_fsl}/{subj}/**/*desc-tfilt*Masked_bold.nii.gz", recursive=True
     )
     if len(denoise_files) != (
-        len(fp_dict["preproc_bold"]) + len(fp_dict["armoa_bold"])
+        len(fp_dict["preproc_bold"]) + len(fp_dict["aroma_bold"])
     ):
         raise FileNotFoundError(f"Missing tfiltMasked files for {subj}.")
     return denoise_files
