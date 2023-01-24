@@ -34,7 +34,7 @@ func_preprocessing \
 projDir=/mnt/keoki/experiments2/EmoRep/Exp2_Compute_Emotion/data_scanner_BIDS
 workDir=${projDir}/derivatives/pre_processing
 func_preprocessing \
-    -s sub-ER0009 \
+    -s sub-ER0009 sub-ER0016 \
     --run-local \
     --proj-dir $projDir \
     --work-dir $workDir
@@ -61,7 +61,7 @@ def _get_args():
         help=textwrap.dedent(
             """\
             Whether fmriprep will ignore fmaps,
-            True if "--ignore-fmap" else False.
+            True if "--ignore-fmaps" else False.
             """
         ),
     )
