@@ -342,10 +342,11 @@ def fsl_preproc(work_fsl, fp_dict, sing_afni, subj, log_dir, run_local):
             f"{subj[7:]}_tempmask",
             log_dir,
         )
-        # Check for output
+        # Check for output, allow script to continue
         chk_path = os.path.join(out_dir, run_tfilt_masked)
         if not os.path.exists(chk_path):
-            raise FileNotFoundError(f"Failed to find : {chk_path}")
+            # raise FileNotFoundError(f"Failed to find : {chk_path}")
+            print(f"Warning : missing expected file {chk_path}")
 
     # Check for required fmriprep keys
     req_keys = ["aroma_bold", "preproc_bold", "mask_bold"]
