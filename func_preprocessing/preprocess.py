@@ -432,6 +432,8 @@ def copy_clean(proj_deriv, work_deriv, subj, no_freesurfer, log_dir):
         BIDS subject
     no_freesurfer : bool
         Whether to use the --fs-no-reconall option
+    log_dir : path
+        Location of directory to capture logs
 
     """
     # Copy remaining FSL files to proj_deriv, use faster bash

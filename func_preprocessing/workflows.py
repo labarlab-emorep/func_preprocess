@@ -115,4 +115,5 @@ def run_preproc(
             work_deriv,
             subj,
             no_freesurfer,
+            log_dir,
         )
