@@ -70,6 +70,7 @@ def fmriprep(
     proj_raw,
     work_deriv,
     sing_fmriprep,
+    tplflow_dir,
     fs_license,
     fd_thresh,
     ignore_fmaps,
@@ -93,6 +94,8 @@ def fmriprep(
         /work/foo/project/derivatives
     sing_fmriprep : path, str
         Location and image of fmriprep singularity file
+    tplflow_dir : path, str
+        Clone location of templateflow
     fs_license : path, str
         Location of FreeSurfer license
     fd_thresh : float
@@ -122,10 +125,7 @@ def fmriprep(
         AROMA or mask files not detected
 
     """
-
-    # Setup fmriprep specific dir/paths, parent directory
-    # of fs_license should contain templateflow.
-    research_dir = os.path.dirname(fs_license)
+    # Setup fmriprep specific dir/paths
     work_fs = os.path.join(work_deriv, "freesurfer")
     work_fp = os.path.join(work_deriv, "fmriprep")
     work_fp_tmp = os.path.join(work_fp, "tmp_work", subj)
@@ -141,7 +141,7 @@ def fmriprep(
             "--cleanenv",
             f"--bind {proj_raw}:{proj_raw}",
             f"--bind {work_deriv}:{work_deriv}",
-            f"--bind {research_dir}:{research_dir}",
+            f"--bind {tplflow_dir}:{tplflow_dir}",
             f"--bind {proj_raw}:/data",
             f"--bind {work_fp}:/out",
             f"{sing_fmriprep} /data /out participant",
