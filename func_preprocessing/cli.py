@@ -124,9 +124,9 @@ def _get_args():
             """\
             Required when --run-local.
             Path to derivatives location on work partition, for processing
-            intermediates. If --work-dir is unspecified, the work-dir will
-            setup in /work/<user>/EmoRep/derivatives. Be mindful of path
-            lengths to avoid a buffer overflow in FreeSurfer.
+            intermediates. If None, the work-dir will setup in
+            /work/<user>/EmoRep/derivatives. Be mindful of path lengths
+            to avoid a buffer overflow in FreeSurfer.
             (default : %(default)s)
             """
         ),
