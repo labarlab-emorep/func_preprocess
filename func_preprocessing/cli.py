@@ -1,52 +1,62 @@
 r"""Conduct preprocessing for EmoRep.
 
-Run data through FreeSurfer and fMRIPrep, then conduct temporal
-filtering via FSL and AFNI. Unless otherwise specified via --work-dir,
-work is conducted in:
-    /work/<whoami>/EmoRep/pre_processing
+Run participants through fMRIPrep preprocessing and then add
+additional steps in FSL for denoising and masking.
 
-Final files are saved to:
-    <proj-dir>/derivatives/pre_processing/[fmriprep | freesurfer | fsl_denoise]
+The pipeline workflow writes files to <work_dir>, and when finished
+purges some intermediates and saves final files to <proj_dir>.
+Specifically, final files are saved to:
+    <proj-dir>/derivatives/pre_processing/[fmriprep|freesurfer|fsl_denoise]
 
-For each subject, a parent job "p<subj>" is submitted that controls
-the workflow. Named subprocess "<subj>foo>" are spawned when
-additional resources are required.
+Log files and scripts are generated for review and troubleshooting,
+and written to:
+    <work_dir>/logs/func_pp_<timestamp>
 
-Log files and scripts written to:
-    /work/<whoami>/EmoRep/pre_processing/logs/func_pp_<timestamp>
+Notes
+-----
+- AFNI and fMRIPrep are executed from singularity images, FSL from
+    a subprocess call.
 
-Requires environmental variables SING_AFNI, SING_FMRIPREP, and FS_LICENSE
-from the "emorep" project environment to supply paths to singularity images
-of AFNI, fMRIPrep, and a FreeSurfer license. The directory containting
-FS_LICENSE must also contain templateflow.
+- Requires the following environmental global variables:
+    -   SING_AFNI = path to AFNI singularity
+    -   SING_FMRIPREP = path to fMRIPrep singularity
+    -   SINGULARITYENV_TEMPLATEFLOW_HOME = path to templateflow for fmriprep
+    -   FS_LICENSE = path to FreeSurfer license
+    -   FSLDIR = path to FSL binaries
+
+- FSL should be also be configured in the environment.
+
+- When running remotely, parent job "p<subj>" is submitted for each subject
+    that controls the workflow. Named subprocesses "<subj>foo" are spawned
+    when additional resources are required.
 
 Examples
 --------
 func_preprocessing -s sub-ER0009
 
-func_preprocessing -s sub-ER0009 sub-ER0010
-
 func_preprocessing \
     -s sub-ER0009 sub-ER0010 \
-    --proj-dir /hpc/group/labarlab/foo \
+    --no-freesurfer \
+    --fd-thresh 0.2 \
     --ignore-fmaps
 
 func_preprocessing \
-    -s sub-ER0009 \
-    --no-freesurfer \
-    --fd-thresh 0.2 \
-    --work-dir /work/foo/test_dir
+    -s sub-ER0009 sub-ER0016 \
+    --run-local \
+    --proj-dir /path/to/local/project \
+    --work-dir /path/to/local/work
 
 """
+# %%
 import os
 import sys
 import time
 import textwrap
 from datetime import datetime
 from argparse import ArgumentParser, RawTextHelpFormatter
-from func_preprocessing import submit
 
 
+# %%
 def _get_args():
     """Get and parse arguments."""
     parser = ArgumentParser(
@@ -58,7 +68,7 @@ def _get_args():
         help=textwrap.dedent(
             """\
             Whether fmriprep will ignore fmaps,
-            True if "--ignore-fmap" else False.
+            True if "--ignore-fmaps" else False.
             """
         ),
     )
@@ -79,7 +89,7 @@ def _get_args():
         help=textwrap.dedent(
             """\
             Whether to use the --fs-no-reconall option with fmriprep,
-            True if "--no--freesurfer" else False
+            True if "--no--freesurfer" else False.
             """
         ),
     )
@@ -89,8 +99,20 @@ def _get_args():
         default="/hpc/group/labarlab/EmoRep/Exp2_Compute_Emotion/data_scanner_BIDS",
         help=textwrap.dedent(
             """\
+            Required when --run-local.
             Path to BIDS-formatted project directory
             (default : %(default)s)
+            """
+        ),
+    )
+    parser.add_argument(
+        "--run-local",
+        action="store_true",
+        help=textwrap.dedent(
+            """\
+            Run pipeline locally on labarserv2 rather than on
+            default DCC.
+            True if "--run-local" else False.
             """
         ),
     )
@@ -100,6 +122,7 @@ def _get_args():
         default=None,
         help=textwrap.dedent(
             """\
+            Required when --run-local.
             Path to derivatives location on work partition, for processing
             intermediates. If --work-dir is unspecified, the work-dir will
             setup in /work/<user>/EmoRep/derivatives. Be mindful of path
@@ -126,7 +149,7 @@ def _get_args():
 
     if len(sys.argv) == 1:
         parser.print_help(sys.stderr)
-        sys.exit(1)
+        sys.exit(0)
 
     return parser
 
@@ -143,28 +166,33 @@ def main():
     ignore_fmaps = args.ignore_fmaps
     no_freesurfer = args.no_freesurfer
     fd_thresh = args.fd_thresh
+    run_local = args.run_local
 
-    # Setup group project directory, paths
+    # Check run_local, work_deriv, and proj_dir. Set paths.
+    if run_local and not work_deriv:
+        raise ValueError("Option --work-deriv required with --run-local.")
+    if run_local and not os.path.exists(work_deriv):
+        raise FileNotFoundError(f"Expected to find directory : {work_deriv}")
+    if not os.path.exists(proj_dir):
+        raise FileNotFoundError(f"Expected to find directory : {proj_dir}")
     proj_raw = os.path.join(proj_dir, "rawdata")
     proj_deriv = os.path.join(proj_dir, "derivatives/pre_processing")
 
-    # Get environmental vars
+    # Get, check environmental vars
     sing_afni = os.environ["SING_AFNI"]
     sing_fmriprep = os.environ["SING_FMRIPREP"]
-    user_name = os.environ["USER"]
     fs_license = os.environ["FS_LICENSE"]
+    tplflow_dir = os.environ["SINGULARITYENV_TEMPLATEFLOW_HOME"]
+    if not run_local:
+        user_name = os.environ["USER"]
 
-    # Check for required files, directories research_bin
-    research_dir = os.path.dirname(fs_license)
-    research_contents = [x for x in os.listdir(research_dir)]
-    req_contents = ["templateflow", "license.txt"]
-    for check in req_contents:
-        if check not in research_contents:
-            raise FileNotFoundError(
-                f"Expected to find {check} in {research_dir}."
-            )
+    try:
+        os.environ["FSLDIR"]
+    except KeyError:
+        print("Missing required global variable FSLDIR")
+        sys.exit(1)
 
-    # Setup work directory, for intermediates
+    # Setup work directory, for intermediates and logs
     if not work_deriv:
         work_deriv = os.path.join(
             "/work",
@@ -179,20 +207,27 @@ def main():
     if not os.path.exists(log_dir):
         os.makedirs(log_dir)
 
-    # Submit jobs for subj_list
+    # Get, submit appropriate workflow method
+    if run_local:
+        from func_preprocessing.workflows import run_preproc as wf_obj
+    else:
+        from func_preprocessing.submit import schedule_subj as wf_obj
+
     for subj in subj_list:
-        _, _ = submit.schedule_subj(
+        wf_obj(
             subj,
             proj_raw,
             proj_deriv,
             work_deriv,
             sing_fmriprep,
+            tplflow_dir,
             fs_license,
             fd_thresh,
             ignore_fmaps,
             no_freesurfer,
             sing_afni,
             log_dir,
+            run_local,
         )
         time.sleep(3)
 
@@ -206,3 +241,5 @@ if __name__ == "__main__":
         print("\tHint: $labar_env emorep\n")
         sys.exit(1)
     main()
+
+# %%
