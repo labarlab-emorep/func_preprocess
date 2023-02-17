@@ -113,7 +113,6 @@ def fmriprep(
     -------
     dict
         "preproc_bold": ["/paths/to/*preproc_bold.nii.gz"]
-        "aroma_bold": ["/paths/to/*AROMAnonaggr_bold.nii.gz"]
         "mask_bold": ["/paths/to/*run-*desc-brain_mask.nii.gz"]
         "mask_anat": "/path/to/anat/*_res-2_desc-brain_mask.nii.gz"
 
@@ -202,12 +201,6 @@ def fmriprep(
             recursive=True,
         )
     )
-    aroma_bold = sorted(
-        glob.glob(
-            f"{work_fp}/{subj}/**/func/*desc-smoothAROMAnonaggr_bold.nii.gz",
-            recursive=True,
-        )
-    )
     mask_bold = sorted(
         glob.glob(
             f"{work_fp}/{subj}/**/func/*desc-brain_mask.nii.gz",
@@ -225,17 +218,16 @@ def fmriprep(
         mask_anat = sorted(glob.glob(f"{anat_path}/{mask_str}"))[0]
 
     # Check lists
-    if not preproc_bold and not aroma_bold and not mask_bold and not mask_anat:
+    if not preproc_bold and not mask_bold and not mask_anat:
         raise FileNotFoundError(f"Missing fMRIPrep output for {subj}.")
 
-    if len(aroma_bold) != len(preproc_bold) != len(mask_bold):
+    if len(preproc_bold) != len(mask_bold):
         raise FileNotFoundError(
-            "Number of AROMA, preprocessed, and mask bold files not equal."
+            "Number of preprocessed and mask bold files not equal."
         )
 
     return {
         "preproc_bold": preproc_bold,
-        "aroma_bold": aroma_bold,
         "mask_bold": mask_bold,
         "mask_anat": mask_anat,
     }
@@ -257,7 +249,6 @@ def fsl_preproc(work_fsl, fp_dict, sing_afni, subj, log_dir, run_local):
     fp_dict : dict
         Returned from preprocessing.fmriprep, contains
         paths to preprocessed BOLD and mask files. Required keys:
-        -   [aroma_bold] = list, paths to fmriprep aroma run output
         -   [preproc_bold] = list, paths to fmriprep preproc run output
         -   [mask_bold] = list, paths to fmriprep preproc run masks
     sing_afni : path, str
@@ -272,7 +263,7 @@ def fsl_preproc(work_fsl, fp_dict, sing_afni, subj, log_dir, run_local):
     Returns
     -------
     list
-        path, location of denoised run files
+        path, location of scaled run files
 
     Raises
     ------
@@ -354,7 +345,7 @@ def fsl_preproc(work_fsl, fp_dict, sing_afni, subj, log_dir, run_local):
         )
         # Check for output, allow script to continue
         if not os.path.exists(out_path):
-            print(f"Warning : missing expected file {out_path}")
+            raise FileNotFoundError(f"Failed to find : {out_path}")
 
     def _scale_epi(
         run_preproc: str, brain_mask: str, out_dir: str, run_scaled: str
@@ -387,19 +378,17 @@ def fsl_preproc(work_fsl, fp_dict, sing_afni, subj, log_dir, run_local):
             mem_gig=6,
         )
         if not os.path.exists(out_path):
-            print(f"Warning : missing expected file {out_path}")
+            raise FileNotFoundError(f"Failed to find : {out_path}")
 
     # Check for required fmriprep keys
-    req_keys = ["aroma_bold", "preproc_bold", "mask_bold"]
+    req_keys = ["preproc_bold", "mask_bold"]
     for _key in req_keys:
         if _key not in fp_dict.keys():
             raise KeyError(f"Expected key in fp_dict : {_key}")
 
     # Temporal filter and mask both preproc and aroma files
     for cnt, run_mask in enumerate(fp_dict["mask_bold"]):
-        run_preproc = fp_dict["preproc_bold"][cnt]
-        run_aroma = fp_dict["aroma_bold"][cnt]
-        for run_epi in [run_preproc, run_aroma]:
+        for run_epi in fp_dict["preproc_bold"][cnt]:
 
             # Setup output location
             sess = "ses-" + run_epi.split("ses-")[1].split("/")[0]
@@ -407,17 +396,10 @@ def fsl_preproc(work_fsl, fp_dict, sing_afni, subj, log_dir, run_local):
             if not os.path.exists(out_dir):
                 os.makedirs(out_dir)
 
-            # Set description based off aroma/preproc
-            h_desc = (
-                "tfiltAROMAMasked"
-                if "smoothAROMA" in run_epi
-                else "tfiltMasked"
-            )
+            # Apply temporal filter and mask, then scale timeseries
             file_prefix = os.path.basename(run_epi).split("desc-")[0]
-
-            # Apply temporal filter and mask
             run_tfilt = file_prefix + "desc-tfilt_bold.nii.gz"
-            run_tfilt_masked = file_prefix + f"desc-{h_desc}_bold.nii.gz"
+            run_tfilt_masked = file_prefix + "desc-tfiltMasked_bold.nii.gz"
             if not os.path.exists(os.path.join(out_dir, run_tfilt_masked)):
                 _temporal_filt(run_epi, out_dir, run_tfilt)
                 _apply_brain_mask(
@@ -426,10 +408,6 @@ def fsl_preproc(work_fsl, fp_dict, sing_afni, subj, log_dir, run_local):
                     run_tfilt,
                     run_mask,
                 )
-
-            # Scale, avoid scaling AROMA
-            if h_desc == "tfiltAROMAMasked":
-                continue
             _scale_epi(
                 run_tfilt_masked,
                 run_mask,
@@ -441,21 +419,18 @@ def fsl_preproc(work_fsl, fp_dict, sing_afni, subj, log_dir, run_local):
             remove_files = [
                 f"{out_dir}/{x}"
                 for x in os.listdir(out_dir)
-                if not fnmatch(x, "*Masked_bold.nii.gz")
-                and not fnmatch(x, "*scaled_bold.nii.gz")
+                if not fnmatch(x, "*scaled_bold.nii.gz")
             ]
             for rm_file in remove_files:
                 os.remove(rm_file)
 
     # Check for expected number of files
-    denoise_files = glob.glob(
-        f"{work_fsl}/{subj}/**/*desc-tfilt*Masked_bold.nii.gz", recursive=True
+    scaled_files = glob.glob(
+        f"{work_fsl}/{subj}/**/*desc-scaled_bold.nii.gz", recursive=True
     )
-    if len(denoise_files) != (
-        len(fp_dict["preproc_bold"]) + len(fp_dict["aroma_bold"])
-    ):
-        raise FileNotFoundError(f"Missing tfiltMasked files for {subj}.")
-    return denoise_files
+    if len(scaled_files) != len(fp_dict["preproc_bold"]):
+        raise FileNotFoundError(f"Missing scaled files for {subj}.")
+    return scaled_files
 
 
 def copy_clean(proj_deriv, work_deriv, subj, no_freesurfer, log_dir):
