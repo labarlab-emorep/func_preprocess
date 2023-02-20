@@ -8,7 +8,6 @@ software used for preprocessing EmoRep data.
 import os
 import glob
 import shutil
-from fnmatch import fnmatch
 from func_preprocessing import submit
 
 
@@ -388,7 +387,7 @@ def fsl_preproc(work_fsl, fp_dict, sing_afni, subj, log_dir, run_local):
 
     # Temporal filter and mask both preproc and aroma files
     for cnt, run_mask in enumerate(fp_dict["mask_bold"]):
-        for run_epi in fp_dict["preproc_bold"][cnt]:
+        for run_epi in [fp_dict["preproc_bold"][cnt]]:
 
             # Setup output location
             sess = "ses-" + run_epi.split("ses-")[1].split("/")[0]
@@ -398,8 +397,15 @@ def fsl_preproc(work_fsl, fp_dict, sing_afni, subj, log_dir, run_local):
 
             # Apply temporal filter and mask, then scale timeseries
             file_prefix = os.path.basename(run_epi).split("desc-")[0]
+            run_scaled = os.path.join(
+                out_dir, f"{file_prefix}desc-scaled_bold.nii.gz"
+            )
+            if os.path.exists(run_scaled):
+                continue
+
             run_tfilt = file_prefix + "desc-tfilt_bold.nii.gz"
             run_tfilt_masked = file_prefix + "desc-tfiltMasked_bold.nii.gz"
+            # TODO remove this check
             if not os.path.exists(os.path.join(out_dir, run_tfilt_masked)):
                 _temporal_filt(run_epi, out_dir, run_tfilt)
                 _apply_brain_mask(
@@ -412,17 +418,8 @@ def fsl_preproc(work_fsl, fp_dict, sing_afni, subj, log_dir, run_local):
                 run_tfilt_masked,
                 run_mask,
                 out_dir,
-                file_prefix + "desc-scaled_bold.nii.gz",
+                run_scaled,
             )
-
-            # Clean unneeded files
-            remove_files = [
-                f"{out_dir}/{x}"
-                for x in os.listdir(out_dir)
-                if not fnmatch(x, "*scaled_bold.nii.gz")
-            ]
-            for rm_file in remove_files:
-                os.remove(rm_file)
 
     # Check for expected number of files
     scaled_files = glob.glob(
@@ -430,6 +427,12 @@ def fsl_preproc(work_fsl, fp_dict, sing_afni, subj, log_dir, run_local):
     )
     if len(scaled_files) != len(fp_dict["preproc_bold"]):
         raise FileNotFoundError(f"Missing scaled files for {subj}.")
+
+    # Clean intermediate files
+    fsl_all = glob.glob(f"{work_fsl}/{subj}/**/func/*.nii.gz", recursive=True)
+    remove_files = [x for x in fsl_all if "scaled" not in x]
+    for rm_file in remove_files:
+        os.remove(rm_file)
     return scaled_files
 
 
