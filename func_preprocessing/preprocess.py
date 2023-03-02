@@ -362,7 +362,7 @@ def fsl_preproc(work_fsl, fp_dict, sing_afni, subj, log_dir, run_local):
                 -p 50)
 
             scale=$(echo 10000/$med_value | bc -l)
-            mul_value=$(printf "%.6f \\n" $scale)
+            mul_value=$(printf '%.6f \\n' $scale)
 
             fslmaths \
                 {out_dir}/{run_preproc} \
