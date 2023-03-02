@@ -191,7 +191,7 @@ def fmriprep(
         shutil.rmtree(work_fp_tmp)
         shutil.rmtree(f"{work_fs}/{subj}")
     except FileNotFoundError:
-        "FreeSurfer output not found, continuing."
+        print("FreeSurfer output not found, continuing.")
 
     # Make list of needed files for FSL denoising
     preproc_bold = sorted(
@@ -405,15 +405,13 @@ def fsl_preproc(work_fsl, fp_dict, sing_afni, subj, log_dir, run_local):
 
             run_tfilt = file_prefix + "desc-tfilt_bold.nii.gz"
             run_tfilt_masked = file_prefix + "desc-tfiltMasked_bold.nii.gz"
-            # TODO remove this check
-            if not os.path.exists(os.path.join(out_dir, run_tfilt_masked)):
-                _temporal_filt(run_epi, out_dir, run_tfilt)
-                _apply_brain_mask(
-                    out_dir,
-                    run_tfilt_masked,
-                    run_tfilt,
-                    run_mask,
-                )
+            _temporal_filt(run_epi, out_dir, run_tfilt)
+            _apply_brain_mask(
+                out_dir,
+                run_tfilt_masked,
+                run_tfilt,
+                run_mask,
+            )
             _scale_epi(
                 run_tfilt_masked,
                 run_mask,
