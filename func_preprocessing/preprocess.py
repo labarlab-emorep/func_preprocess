@@ -8,7 +8,6 @@ software used for preprocessing EmoRep data.
 import os
 import glob
 import shutil
-from fnmatch import fnmatch
 from func_preprocessing import submit
 
 
@@ -113,7 +112,6 @@ def fmriprep(
     -------
     dict
         "preproc_bold": ["/paths/to/*preproc_bold.nii.gz"]
-        "aroma_bold": ["/paths/to/*AROMAnonaggr_bold.nii.gz"]
         "mask_bold": ["/paths/to/*run-*desc-brain_mask.nii.gz"]
         "mask_anat": "/path/to/anat/*_res-2_desc-brain_mask.nii.gz"
 
@@ -193,18 +191,12 @@ def fmriprep(
         shutil.rmtree(work_fp_tmp)
         shutil.rmtree(f"{work_fs}/{subj}")
     except FileNotFoundError:
-        "FreeSurfer output not found, continuing."
+        print("FreeSurfer output not found, continuing.")
 
     # Make list of needed files for FSL denoising
     preproc_bold = sorted(
         glob.glob(
             f"{work_fp}/{subj}/**/func/*desc-preproc_bold.nii.gz",
-            recursive=True,
-        )
-    )
-    aroma_bold = sorted(
-        glob.glob(
-            f"{work_fp}/{subj}/**/func/*desc-smoothAROMAnonaggr_bold.nii.gz",
             recursive=True,
         )
     )
@@ -225,17 +217,16 @@ def fmriprep(
         mask_anat = sorted(glob.glob(f"{anat_path}/{mask_str}"))[0]
 
     # Check lists
-    if not preproc_bold and not aroma_bold and not mask_bold and not mask_anat:
+    if not preproc_bold and not mask_bold and not mask_anat:
         raise FileNotFoundError(f"Missing fMRIPrep output for {subj}.")
 
-    if len(aroma_bold) != len(preproc_bold) != len(mask_bold):
+    if len(preproc_bold) != len(mask_bold):
         raise FileNotFoundError(
-            "Number of AROMA, preprocessed, and mask bold files not equal."
+            "Number of preprocessed and mask bold files not equal."
         )
 
     return {
         "preproc_bold": preproc_bold,
-        "aroma_bold": aroma_bold,
         "mask_bold": mask_bold,
         "mask_anat": mask_anat,
     }
@@ -246,7 +237,8 @@ def fsl_preproc(work_fsl, fp_dict, sing_afni, subj, log_dir, run_local):
     """Conduct extra preprocessing via FSL and AFNI.
 
     Temporally filter BOLD data and then multiply with
-    an anatomical brain mask.
+    an anatomical brain mask. Finally scaled BOLD data
+    by 10000/median.
 
     Parameters
     ----------
@@ -256,7 +248,6 @@ def fsl_preproc(work_fsl, fp_dict, sing_afni, subj, log_dir, run_local):
     fp_dict : dict
         Returned from preprocessing.fmriprep, contains
         paths to preprocessed BOLD and mask files. Required keys:
-        -   [aroma_bold] = list, paths to fmriprep aroma run output
         -   [preproc_bold] = list, paths to fmriprep preproc run output
         -   [mask_bold] = list, paths to fmriprep preproc run masks
     sing_afni : path, str
@@ -271,7 +262,7 @@ def fsl_preproc(work_fsl, fp_dict, sing_afni, subj, log_dir, run_local):
     Returns
     -------
     list
-        path, location of denoised run files
+        path, location of scaled run files
 
     Raises
     ------
@@ -289,6 +280,10 @@ def fsl_preproc(work_fsl, fp_dict, sing_afni, subj, log_dir, run_local):
         run_preproc: str, out_dir: str, run_tfilt: str, bptf: int = 25
     ) -> None:
         """Temporally filter data with FSL."""
+        out_path = os.path.join(out_dir, run_tfilt)
+        if os.path.exists(out_path):
+            return
+
         print(f"Temporally filtering file : {run_preproc}")
         run_tmean = run_tfilt.split("desc-")[0] + "desc-tmean_bold.nii.gz"
         bash_cmd = f"""
@@ -301,7 +296,7 @@ def fsl_preproc(work_fsl, fp_dict, sing_afni, subj, log_dir, run_local):
                 {run_preproc} \
                 -bptf {bptf} -1 \
                 -add {out_dir}/{run_tmean} \
-                {out_dir}/{run_tfilt}
+                {out_path}
         """
         _, _ = submit.submit_subprocess(
             run_local,
@@ -310,9 +305,8 @@ def fsl_preproc(work_fsl, fp_dict, sing_afni, subj, log_dir, run_local):
             log_dir,
             mem_gig=6,
         )
-        chk_path = os.path.join(out_dir, run_tfilt)
-        if not os.path.exists(chk_path):
-            raise FileNotFoundError(f"Failed to find : {chk_path}")
+        if not os.path.exists(out_path):
+            raise FileNotFoundError(f"Failed to find : {out_path}")
 
     def _apply_brain_mask(
         out_dir: str,
@@ -321,6 +315,10 @@ def fsl_preproc(work_fsl, fp_dict, sing_afni, subj, log_dir, run_local):
         brain_mask: str,
     ) -> None:
         """Mask temporally filtered data with AFNI."""
+        out_path = os.path.join(out_dir, run_tfilt_masked)
+        if os.path.exists(out_path):
+            return
+
         brain_mask_name = os.path.basename(brain_mask)
         print(f"Masking file : {run_tfilt}")
         bash_cmd = f"""
@@ -335,7 +333,7 @@ def fsl_preproc(work_fsl, fp_dict, sing_afni, subj, log_dir, run_local):
                 -a {out_dir}/{run_tfilt} \\
                 -b {out_dir}/{brain_mask_name} \\
                 -float \\
-                -prefix {out_dir}/{run_tfilt_masked} \\
+                -prefix {out_path} \\
                 -expr 'a*b'
         """
         _, _ = submit.submit_subprocess(
@@ -345,22 +343,51 @@ def fsl_preproc(work_fsl, fp_dict, sing_afni, subj, log_dir, run_local):
             log_dir,
         )
         # Check for output, allow script to continue
-        chk_path = os.path.join(out_dir, run_tfilt_masked)
-        if not os.path.exists(chk_path):
-            # raise FileNotFoundError(f"Failed to find : {chk_path}")
-            print(f"Warning : missing expected file {chk_path}")
+        if not os.path.exists(out_path):
+            raise FileNotFoundError(f"Failed to find : {out_path}")
+
+    def _scale_epi(
+        run_preproc: str, brain_mask: str, out_dir: str, run_scaled: str
+    ):
+        """Determine median value and scale run."""
+        out_path = os.path.join(out_dir, run_scaled)
+        if os.path.exists(out_path):
+            return
+
+        print(f"Scaling file : {run_preproc}")
+        bash_cmd = f"""
+            med_value=$(fslstats \
+                {out_dir}/{run_preproc} \
+                -k {brain_mask} \
+                -p 50)
+
+            scale=$(echo 10000/$med_value | bc -l)
+            mul_value=$(printf "%.6f \\n" $scale)
+
+            fslmaths \
+                {out_dir}/{run_preproc} \
+                -mul $mul_value \
+                {out_path}
+        """
+        _, _ = submit.submit_subprocess(
+            run_local,
+            bash_cmd,
+            f"{subj[7:]}_scale",
+            log_dir,
+            mem_gig=6,
+        )
+        if not os.path.exists(out_path):
+            raise FileNotFoundError(f"Failed to find : {out_path}")
 
     # Check for required fmriprep keys
-    req_keys = ["aroma_bold", "preproc_bold", "mask_bold"]
+    req_keys = ["preproc_bold", "mask_bold"]
     for _key in req_keys:
         if _key not in fp_dict.keys():
             raise KeyError(f"Expected key in fp_dict : {_key}")
 
     # Temporal filter and mask both preproc and aroma files
     for cnt, run_mask in enumerate(fp_dict["mask_bold"]):
-        run_preproc = fp_dict["preproc_bold"][cnt]
-        run_aroma = fp_dict["aroma_bold"][cnt]
-        for run_epi in [run_preproc, run_aroma]:
+        for run_epi in [fp_dict["preproc_bold"][cnt]]:
 
             # Setup output location
             sess = "ses-" + run_epi.split("ses-")[1].split("/")[0]
@@ -368,52 +395,43 @@ def fsl_preproc(work_fsl, fp_dict, sing_afni, subj, log_dir, run_local):
             if not os.path.exists(out_dir):
                 os.makedirs(out_dir)
 
-            # Set description based off aroma/preproc
-            h_desc = (
-                "tfiltAROMAMasked"
-                if "smoothAROMA" in run_epi
-                else "tfiltMasked"
+            # Apply temporal filter and mask, then scale timeseries
+            file_prefix = os.path.basename(run_epi).split("desc-")[0]
+            run_scaled = os.path.join(
+                out_dir, f"{file_prefix}desc-scaled_bold.nii.gz"
             )
-
-            # Avoid repeating work
-            run_tfilt_masked = (
-                os.path.basename(run_epi).split("desc-")[0]
-                + f"desc-{h_desc}_bold.nii.gz"
-            )
-            if os.path.exists(f"{out_dir}/{run_tfilt_masked}"):
+            if os.path.exists(run_scaled):
                 continue
 
-            # Apply temporal filter
-            run_tfilt = (
-                os.path.basename(run_epi).split("desc-")[0]
-                + "desc-tfilt_bold.nii.gz"
-            )
-            if not os.path.exists(f"{out_dir}/{run_tfilt}"):
-                _temporal_filt(run_epi, out_dir, run_tfilt)
-
-            # Apply mask, clean
+            run_tfilt = file_prefix + "desc-tfilt_bold.nii.gz"
+            run_tfilt_masked = file_prefix + "desc-tfiltMasked_bold.nii.gz"
+            _temporal_filt(run_epi, out_dir, run_tfilt)
             _apply_brain_mask(
                 out_dir,
                 run_tfilt_masked,
                 run_tfilt,
                 run_mask,
             )
-            remove_files = [
-                f"{out_dir}/{x}"
-                for x in os.listdir(out_dir)
-                if not fnmatch(x, "*Masked_bold.nii.gz")
-            ]
-            for rm_file in remove_files:
-                os.remove(rm_file)
+            _scale_epi(
+                run_tfilt_masked,
+                run_mask,
+                out_dir,
+                run_scaled,
+            )
 
-    denoise_files = glob.glob(
-        f"{work_fsl}/{subj}/**/*desc-tfilt*Masked_bold.nii.gz", recursive=True
+    # Check for expected number of files
+    scaled_files = glob.glob(
+        f"{work_fsl}/{subj}/**/*desc-scaled_bold.nii.gz", recursive=True
     )
-    if len(denoise_files) != (
-        len(fp_dict["preproc_bold"]) + len(fp_dict["aroma_bold"])
-    ):
-        raise FileNotFoundError(f"Missing tfiltMasked files for {subj}.")
-    return denoise_files
+    if len(scaled_files) != len(fp_dict["preproc_bold"]):
+        raise FileNotFoundError(f"Missing scaled files for {subj}.")
+
+    # Clean intermediate files
+    fsl_all = glob.glob(f"{work_fsl}/{subj}/**/func/*.nii.gz", recursive=True)
+    remove_files = [x for x in fsl_all if "scaled" not in x]
+    for rm_file in remove_files:
+        os.remove(rm_file)
+    return scaled_files
 
 
 def copy_clean(proj_deriv, work_deriv, subj, no_freesurfer, log_dir):
