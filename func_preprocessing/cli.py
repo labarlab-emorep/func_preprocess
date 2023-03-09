@@ -54,13 +54,15 @@ import time
 import textwrap
 from datetime import datetime
 from argparse import ArgumentParser, RawTextHelpFormatter
+import func_preprocessing._version as ver
 
 
 # %%
 def _get_args():
     """Get and parse arguments."""
+    ver_info = f"\nVersion : {ver.__version__}\n\n"
     parser = ArgumentParser(
-        description=__doc__, formatter_class=RawTextHelpFormatter
+        description=ver_info + __doc__, formatter_class=RawTextHelpFormatter
     )
     parser.add_argument(
         "--ignore-fmaps",
@@ -131,12 +133,6 @@ def _get_args():
             """
         ),
     )
-    parser.add_argument(
-        "-v",
-        "--version",
-        help="Print package version",
-        action="store_true",
-    )
 
     required_args = parser.add_argument_group("Required Arguments")
     required_args.add_argument(
@@ -152,14 +148,6 @@ def _get_args():
         type=str,
         required=True,
     )
-
-    if len(sys.argv) == 2 and (
-        sys.argv[1] == "-v" or sys.argv[1] == "--version"
-    ):
-        import func_preprocessing._version as ver
-
-        print(ver.__version__)
-        sys.exit(0)
 
     if len(sys.argv) == 1:
         parser.print_help(sys.stderr)
