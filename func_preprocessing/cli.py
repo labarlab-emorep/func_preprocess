@@ -131,6 +131,12 @@ def _get_args():
             """
         ),
     )
+    parser.add_argument(
+        "-v",
+        "--version",
+        help="Print package version",
+        action="store_true",
+    )
 
     required_args = parser.add_argument_group("Required Arguments")
     required_args.add_argument(
@@ -146,6 +152,14 @@ def _get_args():
         type=str,
         required=True,
     )
+
+    if len(sys.argv) == 2 and (
+        sys.argv[1] == "-v" or sys.argv[1] == "--version"
+    ):
+        import func_preprocessing._version as ver
+
+        print(ver.__version__)
+        sys.exit(0)
 
     if len(sys.argv) == 1:
         parser.print_help(sys.stderr)
