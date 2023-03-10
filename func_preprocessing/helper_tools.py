@@ -179,7 +179,8 @@ class AfniFslTools(FslMethods):
     def _calc_median(self, median_txt: Union[str, os.PathLike]) -> float:
         """Title."""
         no_head = median_txt.replace("_median.txt", "_nohead.txt")
-        cut_head = 4 if self._run_local else 5
+        # cut_head = 4 if self._run_local else 5
+        cut_head = 4
         bash_cmd = f"""
             tail -n +{cut_head} {median_txt} > {no_head}
             awk \
