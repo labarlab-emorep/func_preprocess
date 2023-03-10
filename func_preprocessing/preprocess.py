@@ -8,7 +8,7 @@ software used for preprocessing EmoRep data.
 import os
 import glob
 import shutil
-from func_preprocessing import submit
+from func_preprocessing import submit, helper_tools
 
 
 # %%
@@ -274,150 +274,51 @@ def fsl_preproc(work_fsl, fp_dict, sing_afni, subj, log_dir, run_local):
         Missing required key in fp_dict
 
     """
-
-    # Set inner functions
-    def _temporal_filt(
-        run_preproc: str, out_dir: str, run_tfilt: str, bptf: int = 25
-    ) -> None:
-        """Temporally filter data with FSL."""
-        out_path = os.path.join(out_dir, run_tfilt)
-        if os.path.exists(out_path):
-            return
-
-        print(f"Temporally filtering file : {run_preproc}")
-        run_tmean = run_tfilt.split("desc-")[0] + "desc-tmean_bold.nii.gz"
-        bash_cmd = f"""
-            fslmaths \
-                {run_preproc} \
-                -Tmean \
-                {out_dir}/{run_tmean}
-
-            fslmaths \
-                {run_preproc} \
-                -bptf {bptf} -1 \
-                -add {out_dir}/{run_tmean} \
-                {out_path}
-        """
-        _, _ = submit.submit_subprocess(
-            run_local,
-            bash_cmd,
-            f"{subj[7:]}_tempfilt",
-            log_dir,
-            mem_gig=6,
-        )
-        if not os.path.exists(out_path):
-            raise FileNotFoundError(f"Failed to find : {out_path}")
-
-    def _apply_brain_mask(
-        out_dir: str,
-        run_tfilt_masked: str,
-        run_tfilt: str,
-        brain_mask: str,
-    ) -> None:
-        """Mask temporally filtered data with AFNI."""
-        out_path = os.path.join(out_dir, run_tfilt_masked)
-        if os.path.exists(out_path):
-            return
-
-        brain_mask_name = os.path.basename(brain_mask)
-        print(f"Masking file : {run_tfilt}")
-        bash_cmd = f"""
-            cp {brain_mask} {out_dir}/{brain_mask_name}
-
-            singularity run \\
-            --cleanenv \\
-            --bind {out_dir}:{out_dir} \\
-            --bind {out_dir}:/opt/home \\
-            {sing_afni} \\
-            3dcalc \\
-                -a {out_dir}/{run_tfilt} \\
-                -b {out_dir}/{brain_mask_name} \\
-                -float \\
-                -prefix {out_path} \\
-                -expr 'a*b'
-        """
-        _, _ = submit.submit_subprocess(
-            run_local,
-            bash_cmd,
-            f"{subj[7:]}_tempmask",
-            log_dir,
-        )
-        # Check for output, allow script to continue
-        if not os.path.exists(out_path):
-            raise FileNotFoundError(f"Failed to find : {out_path}")
-
-    def _scale_epi(
-        run_preproc: str, brain_mask: str, out_dir: str, run_scaled: str
-    ):
-        """Determine median value and scale run."""
-        out_path = os.path.join(out_dir, run_scaled)
-        if os.path.exists(out_path):
-            return
-
-        print(f"Scaling file : {run_preproc}")
-        bash_cmd = f"""
-            med_value=$(fslstats \
-                {out_dir}/{run_preproc} \
-                -k {brain_mask} \
-                -p 50)
-
-            scale=$(echo 10000/$med_value | bc -l)
-            mul_value=$(printf '%.6f \\n' $scale)
-
-            fslmaths \
-                {out_dir}/{run_preproc} \
-                -mul $mul_value \
-                {out_path}
-        """
-        _, _ = submit.submit_subprocess(
-            run_local,
-            bash_cmd,
-            f"{subj[7:]}_scale",
-            log_dir,
-            mem_gig=6,
-        )
-        if not os.path.exists(out_path):
-            raise FileNotFoundError(f"Failed to find : {out_path}")
-
     # Check for required fmriprep keys
     req_keys = ["preproc_bold", "mask_bold"]
     for _key in req_keys:
         if _key not in fp_dict.keys():
             raise KeyError(f"Expected key in fp_dict : {_key}")
 
-    # Temporal filter and mask both preproc and aroma files
-    for cnt, run_mask in enumerate(fp_dict["mask_bold"]):
-        for run_epi in [fp_dict["preproc_bold"][cnt]]:
+    #
+    afni_fsl = helper_tools.AfniFslTools(log_dir, run_local, sing_afni)
 
-            # Setup output location
-            sess = "ses-" + run_epi.split("ses-")[1].split("/")[0]
-            out_dir = os.path.join(work_fsl, subj, sess, "func")
-            if not os.path.exists(out_dir):
-                os.makedirs(out_dir)
+    #
+    for run_epi, run_mask in zip(
+        fp_dict["preproc_bold"], fp_dict["mask_bold"]
+    ):
+        # Setup output location
+        sess = "ses-" + run_epi.split("ses-")[1].split("/")[0]
+        out_dir = os.path.join(work_fsl, subj, sess, "func")
+        if not os.path.exists(out_dir):
+            os.makedirs(out_dir)
+        afni_fsl.set_subj(subj, out_dir)
 
-            # Apply temporal filter and mask, then scale timeseries
-            file_prefix = os.path.basename(run_epi).split("desc-")[0]
-            run_scaled = os.path.join(
-                out_dir, f"{file_prefix}desc-scaled_bold.nii.gz"
-            )
-            if os.path.exists(run_scaled):
-                continue
+        # Apply temporal filter and mask, then scale timeseries
+        file_prefix = os.path.basename(run_epi).split("desc-")[0]
+        run_scaled = os.path.join(
+            out_dir, f"{file_prefix}desc-scaled_bold.nii.gz"
+        )
+        if os.path.exists(run_scaled):
+            continue
 
-            run_tfilt = file_prefix + "desc-tfilt_bold.nii.gz"
-            run_tfilt_masked = file_prefix + "desc-tfiltMasked_bold.nii.gz"
-            _temporal_filt(run_epi, out_dir, run_tfilt)
-            _apply_brain_mask(
-                out_dir,
-                run_tfilt_masked,
-                run_tfilt,
-                run_mask,
-            )
-            _scale_epi(
-                run_tfilt_masked,
-                run_mask,
-                out_dir,
-                run_scaled,
-            )
+        #
+        run_tmean = afni_fsl.tmean(
+            run_epi, file_prefix + "desc-tmean_bold.nii.gz"
+        )
+        run_bandpass = afni_fsl.bandpass(
+            run_epi, run_tmean, file_prefix + "desc-tfilt_bold.nii.gz"
+        )
+        run_masked = afni_fsl.mask_epi(
+            run_bandpass,
+            run_mask,
+            file_prefix + "desc-tfiltMasked_bold.nii.gz",
+        )
+
+        #
+        med_value = afni_fsl.median(run_masked, run_mask)
+        print(med_value)
+        _ = afni_fsl.scale(run_masked, os.path.basename(run_scaled), med_value)
 
     # Check for expected number of files
     scaled_files = glob.glob(
