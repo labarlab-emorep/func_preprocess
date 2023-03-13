@@ -1,5 +1,6 @@
 """Methods for controlling sbatch and subprocess submissions."""
 import sys
+import time
 import subprocess
 import textwrap
 
@@ -80,6 +81,7 @@ def submit_subprocess(
 
     if run_local:
         job_out, job_err = _bash_sp(bash_cmd)
+        time.sleep(30)  # Help file checks pass on slow DCC
     else:
         job_out, job_err = _write_sbatch(bash_cmd)
     return (job_out, job_err)

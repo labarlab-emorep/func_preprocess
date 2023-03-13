@@ -281,7 +281,7 @@ def fsl_preproc(work_fsl, fp_dict, sing_afni, subj, log_dir, run_local):
             raise KeyError(f"Expected key in fp_dict : {_key}")
 
     #
-    afni_fsl = helper_tools.AfniFslTools(log_dir, run_local, sing_afni)
+    afni_fsl = helper_tools.AfniFslMethods(log_dir, run_local, sing_afni)
 
     #
     for run_epi, run_mask in zip(
