@@ -1,5 +1,6 @@
 """Methods for FSL and AFNI commands."""
 import os
+import time
 import subprocess
 from typing import Union
 from func_preprocessing import submit
@@ -42,8 +43,7 @@ class FslMethods:
 
     def __init__(self, log_dir: Union[str, os.PathLike], run_local: bool):
         """Initialize."""
-        if not os.path.exists(log_dir):
-            raise FileNotFoundError(f"Expected log_dir : {log_dir}")
+        self._chk_path(log_dir)
         if not isinstance(run_local, bool):
             raise TypeError("Unexpected type for run_local")
 
@@ -51,17 +51,23 @@ class FslMethods:
         self._log_dir = log_dir
         self._run_local = run_local
 
+    def _chk_path(self, file_path: Union[str, os.PathLike]):
+        """Raise error if file is missing."""
+        if not os.path.exists(file_path):
+            raise FileNotFoundError(
+                f"Expected file or directory : {file_path}"
+            )
+
     def set_subj(self, subj: str, out_dir: Union[str, os.PathLike]):
         """Set subject, output directory attributes."""
-        if not os.path.exists(out_dir):
-            raise FileNotFoundError(f"Expected output dir : {out_dir}")
+        self._chk_path(out_dir)
         self.subj = subj
         self.out_dir = out_dir
 
     def _submit_check(
         self, bash_cmd: str, out_path: Union[str, os.PathLike], job_name: str
     ) -> bool:
-        """Submit shell command and return True if output detected."""
+        """Submit shell command and return True if output is found."""
         stdout, stderr = submit.submit_subprocess(
             self._run_local,
             bash_cmd,
@@ -69,6 +75,10 @@ class FslMethods:
             self._log_dir,
             mem_gig=6,
         )
+
+        # Give commands like tmean and scale time to write
+        if not os.path.exists(out_path):
+            time.sleep(120)
         if not os.path.exists(out_path):
             raise FileNotFoundError(
                 f"Missing {job_name} output\n{stdout}\n{stderr}"
@@ -81,8 +91,7 @@ class FslMethods:
         out_name: str,
     ) -> Union[str, os.PathLike]:
         """Make, return path to mean EPI timeseries NIfTI."""
-        if not os.path.exists(in_epi):
-            raise FileNotFoundError(f"Expected file : {in_epi}")
+        self._chk_path(in_epi)
         out_path = os.path.join(self.out_dir, out_name)
         if os.path.exists(out_path):
             return out_path
@@ -105,10 +114,10 @@ class FslMethods:
         bptf: int = 25,
     ) -> Union[str, os.PathLike]:
         """Make, return path to bandpass filtered EPI NIfTI."""
-        if not os.path.exists(in_epi):
-            raise FileNotFoundError(f"Expected file : {in_epi}")
+        self._chk_path(in_epi)
         if not isinstance(bptf, int):
             raise TypeError("Expected type int for bptf")
+
         out_path = os.path.join(self.out_dir, out_name)
         if os.path.exists(out_path):
             return out_path
@@ -131,10 +140,10 @@ class FslMethods:
         med_value: float,
     ) -> Union[str, os.PathLike]:
         """Make, return path to scaled EPI NIfTI."""
-        if not os.path.exists(in_epi):
-            raise FileNotFoundError(f"Expected file : {in_epi}")
+        self._chk_path(in_epi)
         if not isinstance(med_value, float):
             raise TypeError("Expected med_value type float")
+
         out_path = os.path.join(self.out_dir, out_name)
         if os.path.exists(out_path):
             return out_path
@@ -165,10 +174,9 @@ class FslMethods:
             to implement on DCC.
 
         """
-        if not os.path.exists(in_epi):
-            raise FileNotFoundError(f"Expected file : {in_epi}")
-        if not os.path.exists(mask_path):
-            raise FileNotFoundError(f"Expected file : {mask_path}")
+        self._chk_path(in_epi)
+        self._chk_path(mask_path)
+
         bash_cmd = f"""
             fslstats \
                 {in_epi} \
@@ -185,16 +193,28 @@ class AfniFslMethods(FslMethods):
 
     Inherits FslMethods.
 
+    Methods
+    -------
+
+    Example
+    -------
+
     """
 
-    def __init__(self, log_dir, run_local, sing_afni):
-        """Title."""
+    def __init__(
+        self,
+        log_dir: Union[str, os.PathLike],
+        run_local: bool,
+        sing_afni: Union[str, os.PathLike],
+    ):
+        """Initialize."""
         print("Initializing AfniMethods")
         super().__init__(log_dir, run_local)
+        self._chk_path(sing_afni)
         self._sing_afni = sing_afni
 
     def _prepend_afni(self) -> list:
-        """Return singularity call."""
+        """Return singularity call setup."""
         return [
             "singularity",
             "run",
@@ -206,11 +226,13 @@ class AfniFslMethods(FslMethods):
 
     def mask_epi(
         self,
-        epi_path: Union[str, os.PathLike],
+        in_epi: Union[str, os.PathLike],
         mask_path: Union[str, os.PathLike],
         out_name: str,
     ) -> Union[str, os.PathLike]:
         """Make, return path to masked EPI NIfTI."""
+        self._chk_path(in_epi)
+        self._chk_path(mask_path)
         out_path = os.path.join(self.out_dir, out_name)
         if os.path.exists(out_path):
             return out_path
@@ -220,7 +242,7 @@ class AfniFslMethods(FslMethods):
         cp_list = ["cp", mask_path, work_mask, ";"]
         calc_list = [
             "3dcalc",
-            f"-a {epi_path}",
+            f"-a {in_epi}",
             f"-b {work_mask}",
             "-float",
             f"-prefix {out_path}",
@@ -231,7 +253,9 @@ class AfniFslMethods(FslMethods):
             return out_path
 
     def _calc_median(self, median_txt: Union[str, os.PathLike]) -> float:
-        """Title."""
+        """Calculate median from 3dROIstats columns."""
+        # Strip stdout, column names from txt file, fourth column
+        # contains median values for each volume.
         no_head = median_txt.replace("_median.txt", "_nohead.txt")
         # cut_head = 4 if self._run_local else 5
         cut_head = 4
@@ -251,6 +275,9 @@ class AfniFslMethods(FslMethods):
         mask_path: Union[str, os.PathLike],
     ) -> float:
         """Calcualte median EPI voxel value."""
+        self._chk_path(in_epi)
+        self._chk_path(mask_path)
+
         print("\tCalculating median voxel value")
         out_path = os.path.join(self.out_dir, "tmp_median.txt")
         work_mask = os.path.join(self.out_dir, os.path.basename(mask_path))
@@ -264,4 +291,5 @@ class AfniFslMethods(FslMethods):
         ]
         bash_cmd = " ".join(cp_list + self._prepend_afni() + bash_list)
         _ = self._submit_check(bash_cmd, out_path, "median")
-        return self._calc_median(out_path)
+        med_value = self._calc_median(out_path)
+        return med_value
