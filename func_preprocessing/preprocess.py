@@ -236,9 +236,8 @@ def fmriprep(
 def fsl_preproc(work_fsl, fp_dict, sing_afni, subj, log_dir, run_local):
     """Conduct extra preprocessing via FSL and AFNI.
 
-    Temporally filter BOLD data and then multiply with
-    an anatomical brain mask. Finally scaled BOLD data
-    by 10000/median.
+    Bandpass filter and mask each EPI run, then scale EPI
+    timeseries by 10000/median.
 
     Parameters
     ----------
@@ -280,10 +279,8 @@ def fsl_preproc(work_fsl, fp_dict, sing_afni, subj, log_dir, run_local):
         if _key not in fp_dict.keys():
             raise KeyError(f"Expected key in fp_dict : {_key}")
 
-    #
+    # Get methods, run on each scan/mask combo
     afni_fsl = helper_tools.AfniFslMethods(log_dir, run_local, sing_afni)
-
-    #
     for run_epi, run_mask in zip(
         fp_dict["preproc_bold"], fp_dict["mask_bold"]
     ):
@@ -294,7 +291,7 @@ def fsl_preproc(work_fsl, fp_dict, sing_afni, subj, log_dir, run_local):
             os.makedirs(out_dir)
         afni_fsl.set_subj(subj, out_dir)
 
-        # Apply temporal filter and mask, then scale timeseries
+        # Set up filenames, check for work
         file_prefix = os.path.basename(run_epi).split("desc-")[0]
         run_scaled = os.path.join(
             out_dir, f"{file_prefix}desc-scaled_bold.nii.gz"
@@ -302,7 +299,7 @@ def fsl_preproc(work_fsl, fp_dict, sing_afni, subj, log_dir, run_local):
         if os.path.exists(run_scaled):
             continue
 
-        #
+        # Find mean timeseries, bandpass filter, and mask
         run_tmean = afni_fsl.tmean(
             run_epi, file_prefix + "desc-tmean_bold.nii.gz"
         )
@@ -315,7 +312,7 @@ def fsl_preproc(work_fsl, fp_dict, sing_afni, subj, log_dir, run_local):
             file_prefix + "desc-tfiltMasked_bold.nii.gz",
         )
 
-        #
+        # Scale timeseries
         med_value = afni_fsl.median(run_masked, run_mask)
         print(med_value)
         _ = afni_fsl.scale(run_masked, os.path.basename(run_scaled), med_value)
@@ -329,7 +326,9 @@ def fsl_preproc(work_fsl, fp_dict, sing_afni, subj, log_dir, run_local):
 
     # Clean intermediate files
     fsl_all = glob.glob(f"{work_fsl}/{subj}/**/func/*.nii.gz", recursive=True)
-    remove_files = [x for x in fsl_all if "scaled" not in x]
+    tmp_all = glob.glob(f"{work_fsl}/{subj}/**/func/tmp_*", recursive=True)
+    list_all = fsl_all + tmp_all
+    remove_files = [x for x in list_all if "scaled" not in x]
     for rm_file in remove_files:
         os.remove(rm_file)
     return scaled_files

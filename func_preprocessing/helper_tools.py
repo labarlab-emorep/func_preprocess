@@ -9,6 +9,8 @@ from func_preprocessing import submit
 class FslMethods:
     """Collection of FSL commands for processing EPI data.
 
+    Used for conducting extra preprocessing steps following fMRIPrep.
+
     Methods
     -------
     bandpass(in_epi, in_tmean, out_name, bptf=25)
@@ -25,6 +27,12 @@ class FslMethods:
 
     Example
     -------
+    The example below conducts the following steps for two participants:
+        -   Find mean of EPI timeseries
+        -   Bandpass filter EPI timeseries
+        -   Calculate median EPI voxel value (FslMethods.median is outdated)
+        -   Scale EPI timeseries
+
     fm = FslMethods("/path/to/log/dir", True)
     for subj in ["sub-ER0009", "sub-ER0010"]:
         fm.set_subj(subj, f"/path/to/{subj}/output/dir")
@@ -189,15 +197,47 @@ class FslMethods:
 
 
 class AfniFslMethods(FslMethods):
-    """Title.
+    """Collection of AFNI and FSL commands for processing EPI data.
+
+    Used for conducting extra preprocessing steps following fMRIPrep.
 
     Inherits FslMethods.
 
     Methods
     -------
+    mask_epi(in_epi, mask_path, out_name)
+        Multiply an EPI NIfTI with a mask
+    median(in_epi, mask_path)
+        Derive median voxel value from EPI file
 
     Example
     -------
+    The example below conducts the following steps for two participants:
+        -   Find mean of EPI timeseries
+        -   Bandpass filter EPI timeseries
+        -   Mask filtered EPI
+        -   Calculate median EPI voxel value
+        -   Scale EPI timeseries
+
+    afm = AfniFslMethods("/path/to/log/dir", True)
+    for subj in ["sub-ER0009", "sub-ER0010"]:
+        afm.set_subj(subj, f"/path/to/{subj}/output/dir")
+        tmean_path = afm.tmean(
+            f"/path/to/{subj}/input.nii.gz", "output_tmean.nii.gz"
+        )
+        band_path = afm.bandpass(
+            f"/path/to/{subj}/input.nii.gz",
+            tmean_path,
+            "output_bandpass.nii.gz",
+        )
+        run_mask = f"/path/to/{subj}/brain_mask.nii.gz"
+        band_masked = afm.mask_epi(
+            band_path, run_mask, "output_bandpass_masked.nii.gz"
+        )
+        med_value = fm.median(band_masked, run_mask)
+        scale_path = fm.scale(
+            band_masked, "output_scale.nii.gz", med_value
+        )
 
     """
 
