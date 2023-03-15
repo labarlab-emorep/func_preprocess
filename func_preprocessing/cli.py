@@ -54,13 +54,15 @@ import time
 import textwrap
 from datetime import datetime
 from argparse import ArgumentParser, RawTextHelpFormatter
+import func_preprocessing._version as ver
 
 
 # %%
 def _get_args():
     """Get and parse arguments."""
+    ver_info = f"\nVersion : {ver.__version__}\n\n"
     parser = ArgumentParser(
-        description=__doc__, formatter_class=RawTextHelpFormatter
+        description=ver_info + __doc__, formatter_class=RawTextHelpFormatter
     )
     parser.add_argument(
         "--ignore-fmaps",
