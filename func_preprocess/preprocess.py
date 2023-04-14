@@ -8,7 +8,7 @@ software used for preprocessing EmoRep data.
 import os
 import glob
 import shutil
-from func_preprocessing import submit, helper_tools
+from func_preprocess import submit, helper_tools
 
 
 # %%
@@ -120,7 +120,7 @@ def fmriprep(
     FileNotFoundError
         <subj>.html missing
         Different lengths of dict["aroma_bold"] and dict["mask_bold"]
-        AROMA or mask files not detected
+        Missing preproc or mask files
 
     """
     # Setup fmriprep specific dir/paths

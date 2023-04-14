@@ -3,7 +3,7 @@ import os
 import time
 import subprocess
 from typing import Union
-from func_preprocessing import submit
+from func_preprocess import submit
 
 
 class FslMethods:
@@ -219,7 +219,7 @@ class AfniFslMethods(FslMethods):
         -   Calculate median EPI voxel value
         -   Scale EPI timeseries
 
-    afm = AfniFslMethods("/path/to/log/dir", True)
+    afm = AfniFslMethods("/path/to/log/dir", True, "/path/to/afni.simg")
     for subj in ["sub-ER0009", "sub-ER0010"]:
         afm.set_subj(subj, f"/path/to/{subj}/output/dir")
         tmean_path = afm.tmean(

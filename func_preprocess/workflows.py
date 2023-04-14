@@ -1,6 +1,6 @@
 """Pipeline workflows for EmoRep fMRI data."""
 import os
-from func_preprocessing import preprocess
+from func_preprocess import preprocess
 
 
 def run_preproc(
@@ -51,10 +51,6 @@ def run_preproc(
         Location for writing logs
     run_local : bool
         Whether job, subprocesses are run locally
-
-    Returns
-    -------
-    None
 
     Raises
     ------

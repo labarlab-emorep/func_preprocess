@@ -54,7 +54,7 @@ import time
 import textwrap
 from datetime import datetime
 from argparse import ArgumentParser, RawTextHelpFormatter
-import func_preprocessing._version as ver
+import func_preprocess._version as ver
 
 
 # %%
@@ -77,7 +77,7 @@ def _get_args():
     parser.add_argument(
         "--fd-thresh",
         type=float,
-        default=0.3,
+        default=0.5,
         help=textwrap.dedent(
             """\
             Framewise displacement threshold
@@ -211,9 +211,9 @@ def main():
 
     # Get, submit appropriate workflow method
     if run_local:
-        from func_preprocessing.workflows import run_preproc as wf_obj
+        from func_preprocess.workflows import run_preproc as wf_obj
     else:
-        from func_preprocessing.submit import schedule_subj as wf_obj
+        from func_preprocess.submit import schedule_subj as wf_obj
 
     for subj in subj_list:
         wf_obj(

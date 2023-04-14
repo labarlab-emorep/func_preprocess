@@ -152,7 +152,7 @@ def schedule_subj(
 
         import os
         import sys
-        from func_preprocessing import workflows
+        from func_preprocess import workflows
 
         workflows.run_preproc(
             "{subj}",
@@ -172,7 +172,7 @@ def schedule_subj(
 
     """
     sbatch_cmd = textwrap.dedent(sbatch_cmd)
-    py_script = f"{log_dir}/run_fmriprep_{subj}.py"
+    py_script = f"{log_dir}/run_preprocess_{subj}.py"
     with open(py_script, "w") as ps:
         ps.write(sbatch_cmd)
     h_sp = subprocess.Popen(
