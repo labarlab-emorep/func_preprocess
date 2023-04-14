@@ -32,15 +32,15 @@ Notes
 
 Examples
 --------
-func_preprocessing -s sub-ER0009
+func_preprocess -s sub-ER0009
 
-func_preprocessing \
+func_preprocess \
     -s sub-ER0009 sub-ER0010 \
     --no-freesurfer \
     --fd-thresh 0.2 \
     --ignore-fmaps
 
-func_preprocessing \
+func_preprocess \
     -s sub-ER0009 sub-ER0016 \
     --run-local \
     --proj-dir /path/to/local/project \
