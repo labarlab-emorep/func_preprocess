@@ -40,11 +40,13 @@ func_preprocess \
     --fd-thresh 0.2 \
     --ignore-fmaps
 
+projDir=/mnt/keoki/experiments2/EmoRep/Exp2_Compute_Emotion/data_scanner_BIDS
+workDir=${projDir}/derivatives/pre_processing
 func_preprocess \
-    -s sub-ER0009 sub-ER0016 \
     --run-local \
-    --proj-dir /path/to/local/project \
-    --work-dir /path/to/local/work
+    --proj-dir $projDir \
+    --work-dir $workDir \
+    -s sub-ER0009 sub-ER0016
 
 """
 # %%

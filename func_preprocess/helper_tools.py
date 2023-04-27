@@ -333,3 +333,26 @@ class AfniFslMethods(FslMethods):
         _ = self._submit_check(bash_cmd, out_path, "median")
         med_value = self._calc_median(out_path)
         return med_value
+
+    def smooth(
+        self, in_epi: Union[str, os.PathLike], k_size: int, out_name: str
+    ):
+        """Spatially smooth EPI data."""
+        self._chk_path(in_epi)
+        if not type(k_size) == int:
+            raise TypeError("Expected type int for k_size")
+        out_path = os.path.join(self.out_dir, out_name)
+        if os.path.exists(out_path):
+            return out_path
+
+        print("\tSmoothing EPI dataset")
+        smooth_list = [
+            "3dmerge",
+            f"-1blur_fwhm {k_size}",
+            "-doall",
+            f"-prefix {out_path}",
+            in_epi,
+        ]
+        bash_cmd = " ".join(self._prepend_afni() + smooth_list)
+        if self._submit_check(bash_cmd, out_path, "smooth"):
+            return out_path

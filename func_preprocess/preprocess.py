@@ -236,8 +236,8 @@ def fmriprep(
 def fsl_preproc(work_fsl, fp_dict, sing_afni, subj, log_dir, run_local):
     """Conduct extra preprocessing via FSL and AFNI.
 
-    Bandpass filter and mask each EPI run, then scale EPI
-    timeseries by 10000/median.
+    Bandpass filter and mask each EPI run, scale EPI timeseries by
+    10000/median, and then smooth by 4mm FWHM.
 
     Parameters
     ----------
@@ -293,29 +293,35 @@ def fsl_preproc(work_fsl, fp_dict, sing_afni, subj, log_dir, run_local):
 
         # Set up filenames, check for work
         file_prefix = os.path.basename(run_epi).split("desc-")[0]
-        run_scaled = os.path.join(
-            out_dir, f"{file_prefix}desc-scaled_bold.nii.gz"
+        run_smoothed = os.path.join(
+            out_dir, f"{file_prefix}desc-smoothed_bold.nii.gz"
         )
-        if os.path.exists(run_scaled):
+        if os.path.exists(run_smoothed):
             continue
 
         # Find mean timeseries, bandpass filter, and mask
-        run_tmean = afni_fsl.tmean(
-            run_epi, file_prefix + "desc-tmean_bold.nii.gz"
+        run_scaled = os.path.join(
+            out_dir, f"{file_prefix}desc-scaled_bold.nii.gz"
         )
-        run_bandpass = afni_fsl.bandpass(
-            run_epi, run_tmean, file_prefix + "desc-tfilt_bold.nii.gz"
-        )
-        run_masked = afni_fsl.mask_epi(
-            run_bandpass,
-            run_mask,
-            file_prefix + "desc-tfiltMasked_bold.nii.gz",
-        )
+        if not os.path.exists(run_scaled):
+            run_tmean = afni_fsl.tmean(
+                run_epi, f"{file_prefix}desc-tmean_bold.nii.gz"
+            )
+            run_bandpass = afni_fsl.bandpass(
+                run_epi, run_tmean, f"{file_prefix}desc-tfilt_bold.nii.gz"
+            )
+            run_masked = afni_fsl.mask_epi(
+                run_bandpass,
+                run_mask,
+                f"{file_prefix}desc-tfiltMasked_bold.nii.gz",
+            )
 
-        # Scale timeseries
-        med_value = afni_fsl.median(run_masked, run_mask)
-        print(med_value)
-        _ = afni_fsl.scale(run_masked, os.path.basename(run_scaled), med_value)
+            # Scale timeseries and smooth
+            med_value = afni_fsl.median(run_masked, run_mask)
+            run_scaled = afni_fsl.scale(
+                run_masked, f"{file_prefix}desc-scaled_bold.nii.gz", med_value
+            )
+        _ = afni_fsl.smooth(run_scaled, 4, os.path.basename(run_smoothed))
 
     # Check for expected number of files
     scaled_files = glob.glob(
@@ -328,7 +334,9 @@ def fsl_preproc(work_fsl, fp_dict, sing_afni, subj, log_dir, run_local):
     fsl_all = glob.glob(f"{work_fsl}/{subj}/**/func/*.nii.gz", recursive=True)
     tmp_all = glob.glob(f"{work_fsl}/{subj}/**/func/tmp_*", recursive=True)
     list_all = fsl_all + tmp_all
-    remove_files = [x for x in list_all if "scaled" not in x]
+    remove_files = [
+        x for x in list_all if "scaled" not in x and "smoothed" not in x
+    ]
     for rm_file in remove_files:
         os.remove(rm_file)
     return scaled_files
