@@ -8,6 +8,8 @@ software used for preprocessing EmoRep data.
 import os
 import glob
 import shutil
+from typing import Union
+from multiprocessing import Process
 from func_preprocess import submit, helper_tools
 
 
@@ -281,9 +283,12 @@ def fsl_preproc(work_fsl, fp_dict, sing_afni, subj, log_dir, run_local):
 
     # Get methods, run on each scan/mask combo
     afni_fsl = helper_tools.AfniFslMethods(log_dir, run_local, sing_afni)
-    for run_epi, run_mask in zip(
-        fp_dict["preproc_bold"], fp_dict["mask_bold"]
+
+    # Mutliprocess extra preprocessing across runs
+    def _preproc(
+        run_epi: Union[str, os.PathLike], run_mask: Union[str, os.PathLike]
     ):
+        """Conduct extra preprocessing via FSL, AFNI."""
         # Setup output location
         sess = "ses-" + run_epi.split("ses-")[1].split("/")[0]
         out_dir = os.path.join(work_fsl, subj, sess, "func")
@@ -297,7 +302,7 @@ def fsl_preproc(work_fsl, fp_dict, sing_afni, subj, log_dir, run_local):
             out_dir, f"{file_prefix}desc-smoothed_bold.nii.gz"
         )
         if os.path.exists(run_smoothed):
-            continue
+            return
 
         # Find mean timeseries, bandpass filter, and mask
         run_scaled = os.path.join(
@@ -322,6 +327,65 @@ def fsl_preproc(work_fsl, fp_dict, sing_afni, subj, log_dir, run_local):
                 run_masked, f"{file_prefix}desc-scaled_bold.nii.gz", med_value
             )
         _ = afni_fsl.smooth(run_scaled, 4, os.path.basename(run_smoothed))
+
+    mult_proc = [
+        Process(
+            target=_preproc,
+            args=(
+                run_epi,
+                run_mask,
+            ),
+        )
+        for run_epi, run_mask in zip(
+            fp_dict["preproc_bold"], fp_dict["mask_bold"]
+        )
+    ]
+    for proc in mult_proc:
+        proc.start()
+    for proc in mult_proc:
+        proc.join()
+
+    # for run_epi, run_mask in zip(
+    #     fp_dict["preproc_bold"], fp_dict["mask_bold"]
+    # ):
+    #     # Setup output location
+    #     sess = "ses-" + run_epi.split("ses-")[1].split("/")[0]
+    #     out_dir = os.path.join(work_fsl, subj, sess, "func")
+    #     if not os.path.exists(out_dir):
+    #         os.makedirs(out_dir)
+    #     afni_fsl.set_subj(subj, out_dir)
+
+    #     # Set up filenames, check for work
+    #     file_prefix = os.path.basename(run_epi).split("desc-")[0]
+    #     run_smoothed = os.path.join(
+    #         out_dir, f"{file_prefix}desc-smoothed_bold.nii.gz"
+    #     )
+    #     if os.path.exists(run_smoothed):
+    #         continue
+
+    #     # Find mean timeseries, bandpass filter, and mask
+    #     run_scaled = os.path.join(
+    #         out_dir, f"{file_prefix}desc-scaled_bold.nii.gz"
+    #     )
+    #     if not os.path.exists(run_scaled):
+    #         run_tmean = afni_fsl.tmean(
+    #             run_epi, f"{file_prefix}desc-tmean_bold.nii.gz"
+    #         )
+    #         run_bandpass = afni_fsl.bandpass(
+    #             run_epi, run_tmean, f"{file_prefix}desc-tfilt_bold.nii.gz"
+    #         )
+    #         run_masked = afni_fsl.mask_epi(
+    #             run_bandpass,
+    #             run_mask,
+    #             f"{file_prefix}desc-tfiltMasked_bold.nii.gz",
+    #         )
+
+    #         # Scale timeseries and smooth
+    #         med_value = afni_fsl.median(run_masked, run_mask)
+    #         run_scaled = afni_fsl.scale(
+    #             run_masked, f"{file_prefix}desc-scaled_bold.nii.gz", med_value
+    #         )
+    #     _ = afni_fsl.smooth(run_scaled, 4, os.path.basename(run_smoothed))
 
     # Check for expected number of files
     scaled_files = glob.glob(
