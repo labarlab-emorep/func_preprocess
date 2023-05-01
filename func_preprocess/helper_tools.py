@@ -79,7 +79,7 @@ class FslMethods:
         stdout, stderr = submit.submit_subprocess(
             self._run_local,
             bash_cmd,
-            f"{self.subj[7:]}{job_name}",
+            job_name,
             self._log_dir,
             mem_gig=6,
         )
@@ -92,6 +92,16 @@ class FslMethods:
                 f"Missing {job_name} output\n{stdout}\n{stderr}"
             )
         return True
+
+    def _get_run(self, epi_path: Union[str, os.PathLike]) -> str:
+        """Return run number."""
+        return os.path.basename(epi_path).split("run-")[1].split("_")[0][1]
+
+    def _job_name(self, epi_path: Union[str, os.PathLike], name: str) -> str:
+        """Return job name, including session and run number."""
+        run_num = self._get_run(epi_path)
+        sess = os.path.basename(epi_path).split("ses-")[1].split("_")[0]
+        return f"{self.subj[-4:]}_{sess}_r{run_num}_{name}"
 
     def tmean(
         self,
@@ -111,7 +121,9 @@ class FslMethods:
                 -Tmean \
                 {out_path}
         """
-        if self._submit_check(bash_cmd, out_path, "tmean"):
+        if self._submit_check(
+            bash_cmd, out_path, self._job_name(in_epi, "tmean")
+        ):
             return out_path
 
     def bandpass(
@@ -138,7 +150,9 @@ class FslMethods:
                 -add {in_tmean} \
                 {out_path}
         """
-        if self._submit_check(bash_cmd, out_path, "band"):
+        if self._submit_check(
+            bash_cmd, out_path, self._job_name(in_epi, "band")
+        ):
             return out_path
 
     def scale(
@@ -164,7 +178,9 @@ class FslMethods:
                 -mul {mul_value} \
                 {out_path}
         """
-        if self._submit_check(bash_cmd, out_path, "scale"):
+        if self._submit_check(
+            bash_cmd, out_path, self._job_name(in_epi, "scale")
+        ):
             return out_path
 
     def median(
@@ -289,7 +305,9 @@ class AfniFslMethods(FslMethods):
             "-expr 'a*b'",
         ]
         bash_cmd = " ".join(cp_list + self._prepend_afni() + calc_list)
-        if self._submit_check(bash_cmd, out_path, "mask"):
+        if self._submit_check(
+            bash_cmd, out_path, self._job_name(in_epi, "mask")
+        ):
             return out_path
 
     def _calc_median(self, median_txt: Union[str, os.PathLike]) -> float:
@@ -319,7 +337,8 @@ class AfniFslMethods(FslMethods):
         self._chk_path(mask_path)
 
         print("\tCalculating median voxel value")
-        out_path = os.path.join(self.out_dir, "tmp_median.txt")
+        run_num = self._get_run(in_epi)
+        out_path = os.path.join(self.out_dir, f"tmp_run{run_num}_median.txt")
         work_mask = os.path.join(self.out_dir, os.path.basename(mask_path))
         cp_list = ["cp", mask_path, work_mask, ";"]
         bash_list = [
@@ -330,7 +349,9 @@ class AfniFslMethods(FslMethods):
             f"> {out_path}",
         ]
         bash_cmd = " ".join(cp_list + self._prepend_afni() + bash_list)
-        _ = self._submit_check(bash_cmd, out_path, "median")
+        _ = self._submit_check(
+            bash_cmd, out_path, self._job_name(in_epi, "median")
+        )
         med_value = self._calc_median(out_path)
         return med_value
 
@@ -354,5 +375,7 @@ class AfniFslMethods(FslMethods):
             in_epi,
         ]
         bash_cmd = " ".join(self._prepend_afni() + smooth_list)
-        if self._submit_check(bash_cmd, out_path, "smooth"):
+        if self._submit_check(
+            bash_cmd, out_path, self._job_name(in_epi, "smooth")
+        ):
             return out_path
