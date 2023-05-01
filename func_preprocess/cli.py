@@ -40,11 +40,13 @@ func_preprocess \
     --fd-thresh 0.2 \
     --ignore-fmaps
 
+projDir=/mnt/keoki/experiments2/EmoRep/Exp2_Compute_Emotion/data_scanner_BIDS
+workDir=${projDir}/derivatives/pre_processing
 func_preprocess \
-    -s sub-ER0009 sub-ER0016 \
     --run-local \
-    --proj-dir /path/to/local/project \
-    --work-dir /path/to/local/work
+    --proj-dir $projDir \
+    --work-dir $workDir \
+    -s sub-ER0009 sub-ER0016
 
 """
 # %%
@@ -204,7 +206,7 @@ def main():
     now_time = datetime.now()
     log_dir = os.path.join(
         os.path.dirname(work_deriv),
-        f"logs/func_pp_{now_time.strftime('%y-%m-%d_%H:%M')}",
+        f"logs/func_preproc_{now_time.strftime('%y-%m-%d_%H:%M')}",
     )
     if not os.path.exists(log_dir):
         os.makedirs(log_dir)
