@@ -291,8 +291,10 @@ def fsl_preproc(work_fsl, fp_dict, sing_afni, subj, log_dir, run_local):
         # Setup output location
         sess = "ses-" + run_epi.split("ses-")[1].split("/")[0]
         out_dir = os.path.join(work_fsl, subj, sess, "func")
-        if not os.path.exists(out_dir):
+        try:
             os.makedirs(out_dir)
+        except FileExistsError:
+            pass
         afni_fsl.set_subj(subj, out_dir)
 
         # Set up filenames, check for work
