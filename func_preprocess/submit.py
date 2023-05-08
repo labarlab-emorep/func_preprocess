@@ -99,6 +99,8 @@ def schedule_subj(
     sing_afni,
     log_dir,
     run_local,
+    user_name,
+    rsa_key,
 ):
     """Schedule pipeline on compute cluster.
 
@@ -136,6 +138,10 @@ def schedule_subj(
         Location for writing logs
     run_local : bool
         Whether job, subprocesses are run locally
+    user_name : str
+        User name for DCC, labarserv2
+    rsa_key : str, os.PathLike
+        Location of RSA key for labarserv2
 
     Returns
     -------
@@ -168,6 +174,8 @@ def schedule_subj(
             "{sing_afni}",
             "{log_dir}",
             {run_local},
+            "{user_name}",
+            "{rsa_key}",
         )
 
     """

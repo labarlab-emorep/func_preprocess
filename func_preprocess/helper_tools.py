@@ -1,9 +1,116 @@
 """Methods for FSL and AFNI commands."""
 import os
 import time
+import glob
 import subprocess
-from typing import Union
+from typing import Union, Tuple
 from func_preprocess import submit
+
+
+class PullPush:
+    """Interact with Keoki to get and send data.
+
+    Download required files for preprocessing, send
+    final files back to Keoki.
+
+    Methods
+    -------
+    pull_rawdata(subj, sess)
+    push_derivatives()
+
+    Example
+    -------
+    sync_data = PullPush(**args)
+    sync_data.pull_rawdata("sub-ER0009", "ses-day2")
+    sync_data.push_derivatives()
+
+    """
+
+    def __init__(
+        self,
+        proj_dir,
+        log_dir,
+        user_name,
+        rsa_key,
+        keoki_path="/mnt/keoki/experiments2/EmoRep/Exp2_Compute_Emotion/data_scanner_BIDS",  # noqa: E501
+    ):
+        """Initialize.
+
+        Parameters
+        ----------
+        proj_dir : str, os.PathLike
+            Location of project directory on group partition
+        log_dir : path
+            Output location for log files and scripts
+        user_name : str
+            User name for DCC, labarserv2
+        rsa_key : str, os.PathLike
+            Location of RSA key for labarserv2
+        keoki_path : str, os.PathLike, optional
+            Location of project directory on Keoki
+
+        """
+        print("Initializing PullPush")
+        self._dcc_proj = proj_dir
+        self._user_name = user_name
+        self._keoki_ip = "ccn-labarserv2.vm.duke.edu"
+        self._keoki_proj = f"{self._user_name}@{self._keoki_ip}:{keoki_path}"
+        self._rsa_key = rsa_key
+        self._log_dir = log_dir
+
+    def pull_rawdata(self, subj, sess):
+        """Download subject, session rawdata from Keoki.
+
+        Parameters
+        ----------
+        subj : str
+            BIDS subject identifier
+        sess : str
+            BIDS session identifier
+
+        """
+        self._subj = subj
+        self._sess = sess
+
+        # Setup destination
+        dcc_raw = os.path.join(self._dcc_proj, "rawdata", subj)
+        if not os.path.exists(dcc_raw):
+            os.makedirs(dcc_raw)
+
+        # Identify source, pull data
+        print(f"\tDownloading rawdata to : {dcc_raw}")
+        keoki_raw = os.path.join(self._keoki_proj, "rawdata", subj, sess)
+        raw_out, raw_err = self._submit_rsync(keoki_raw, dcc_raw)
+
+        # Check setup
+        cnt_raw = glob.glob(f"{dcc_raw}/{sess}/**/*.nii.gz", recursive=True)
+        if not cnt_raw:
+            raise FileNotFoundError(
+                "Error in Keoki->DCC rawdata file transfer:\n\n"
+                + f"stdout:\t{raw_out}\n\nstderr:\t{raw_err}"
+            )
+
+    def push_derivatives(self):
+        """Send final derivatives to Keoki."""
+        dcc_deriv = os.path.join(self._dcc_proj, "derivatives/")
+        keoki_deriv = os.path.join(self._keoki_proj, "derivatives")
+        print(f"\tSending final data to : {keoki_deriv}")
+        _, _ = self._submit_rsync(dcc_deriv, keoki_deriv)
+
+    def _submit_rsync(self, src: str, dst: str) -> Tuple:
+        """Execute rsync between DCC and labarserv2."""
+        bash_cmd = f"""\
+            rsync \
+            -e "ssh -i {self._rsa_key}" \
+            -rauv {src} {dst}
+        """
+        job_out, job_err = submit.submit_subprocess(
+            False,
+            bash_cmd,
+            f"{self._subj[-4:]}_{self._sess[3:]}_pullPush",
+            self._log_dir,
+        )
+        return (job_out, job_err)
 
 
 class FslMethods:

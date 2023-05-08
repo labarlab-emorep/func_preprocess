@@ -1,6 +1,6 @@
 """Pipeline workflows for EmoRep fMRI data."""
 import os
-from func_preprocess import preprocess
+from func_preprocess import preprocess, helper_tools
 
 
 def run_preproc(
@@ -17,6 +17,8 @@ def run_preproc(
     sing_afni,
     log_dir,
     run_local,
+    user_name=None,
+    rsa_key=None,
 ):
     """Functional preprocessing pipeline for EmoRep.
 
@@ -51,6 +53,10 @@ def run_preproc(
         Location for writing logs
     run_local : bool
         Whether job, subprocesses are run locally
+    user_name : str, optional
+        User name for DCC, labarserv2
+    rsa_key : str, os.PathLike, optional
+        Location of RSA key for labarserv2
 
     Raises
     ------
@@ -67,6 +73,10 @@ def run_preproc(
             )
     if not isinstance(fd_thresh, float):
         raise TypeError("Expected float type for --fd_thresh")
+    if (not run_local and user_name is None) or (
+        not run_local and rsa_key is None
+    ):
+        raise ValueError("user name and rsa key required on DCC")
 
     # Setup software derivatives dirs, for working
     work_fp = os.path.join(work_deriv, "fmriprep")
@@ -82,6 +92,16 @@ def run_preproc(
     for h_dir in [proj_fp, proj_fsl]:
         if not os.path.exists(h_dir):
             os.makedirs(h_dir)
+
+    # Download needed files
+    if not run_local:
+        sync_data = helper_tools.PullPush(
+            os.path.dirname(proj_raw), log_dir, user_name, rsa_key
+        )
+        sync_data.pull_rawdata(subj, "ses-day2")
+        sync_data.pull_rawdata(subj, "ses-day3")
+
+    return
 
     # Run fMRIPrep
     fp_dict = preprocess.fmriprep(
@@ -117,3 +137,4 @@ def run_preproc(
             no_freesurfer,
             log_dir,
         )
+        sync_data.push_derivatives()

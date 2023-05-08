@@ -32,10 +32,11 @@ Notes
 
 Examples
 --------
-func_preprocess -s sub-ER0009
+func_preprocess -s sub-ER0009 --rsa-key $RSA_LS2
 
 func_preprocess \
     -s sub-ER0009 sub-ER0010 \
+    --rsa-key $RSA_LS2 \
     --no-freesurfer \
     --fd-thresh 0.2 \
     --ignore-fmaps
@@ -110,6 +111,11 @@ def _get_args():
         ),
     )
     parser.add_argument(
+        "--rsa-key",
+        type=str,
+        help="Location of labarserv2 RSA key",
+    )
+    parser.add_argument(
         "--run-local",
         action="store_true",
         help=textwrap.dedent(
@@ -171,6 +177,7 @@ def main():
     no_freesurfer = args.no_freesurfer
     fd_thresh = args.fd_thresh
     run_local = args.run_local
+    rsa_key = args.rsa_key
 
     # Check run_local, work_deriv, and proj_dir. Set paths.
     if run_local and not work_deriv:
@@ -218,7 +225,7 @@ def main():
         from func_preprocess.submit import schedule_subj as wf_obj
 
     for subj in subj_list:
-        wf_obj(
+        wf_args = [
             subj,
             proj_raw,
             proj_deriv,
@@ -232,7 +239,11 @@ def main():
             sing_afni,
             log_dir,
             run_local,
-        )
+        ]
+        if not run_local:
+            wf_args.append(user_name)
+            wf_args.append(rsa_key)
+        wf_obj(*wf_args)
         time.sleep(3)
 
 
