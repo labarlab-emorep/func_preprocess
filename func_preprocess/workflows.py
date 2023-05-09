@@ -101,8 +101,6 @@ def run_preproc(
         sync_data.pull_rawdata(subj, "ses-day2")
         sync_data.pull_rawdata(subj, "ses-day3")
 
-    return
-
     # Run fMRIPrep
     fp_dict = preprocess.fmriprep(
         subj,
@@ -137,4 +135,5 @@ def run_preproc(
             no_freesurfer,
             log_dir,
         )
+        sync_data.sess = "ses-all"
         sync_data.push_derivatives()

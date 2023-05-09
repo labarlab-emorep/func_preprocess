@@ -20,8 +20,9 @@ class PullPush:
 
     Example
     -------
-    sync_data = PullPush(**args)
+    sync_data = PullPush(*args)
     sync_data.pull_rawdata("sub-ER0009", "ses-day2")
+    sync_data.sess = "ses-all"
     sync_data.push_derivatives()
 
     """
@@ -68,9 +69,14 @@ class PullPush:
         sess : str
             BIDS session identifier
 
+        Attributes
+        ----------
+        sess : str
+            BIDS session identifier, used to keep job logs straight
+
         """
         self._subj = subj
-        self._sess = sess
+        self.sess = sess
 
         # Setup destination
         dcc_raw = os.path.join(self._dcc_proj, "rawdata", subj)
@@ -101,13 +107,13 @@ class PullPush:
         """Execute rsync between DCC and labarserv2."""
         bash_cmd = f"""\
             rsync \
-            -e "ssh -i {self._rsa_key}" \
+            -e 'ssh -i {self._rsa_key}' \
             -rauv {src} {dst}
         """
         job_out, job_err = submit.submit_subprocess(
             False,
             bash_cmd,
-            f"{self._subj[-4:]}_{self._sess[3:]}_pullPush",
+            f"{self._subj[-4:]}_{self.sess[4:]}_pullPush",
             self._log_dir,
         )
         return (job_out, job_err)
