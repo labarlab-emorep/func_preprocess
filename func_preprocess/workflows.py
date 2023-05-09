@@ -101,6 +101,13 @@ def run_preproc(
         sync_data.pull_rawdata(subj, "ses-day2")
         sync_data.pull_rawdata(subj, "ses-day3")
 
+    #
+    run_fs = preprocess.RunFreeSurfer(
+        subj, proj_raw, work_deriv, log_dir, run_local
+    )
+    run_fs.recon_all(["ses-day2", "ses-day3"])
+    return
+
     # Run fMRIPrep
     fp_dict = preprocess.fmriprep(
         subj,

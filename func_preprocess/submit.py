@@ -154,7 +154,8 @@ def schedule_subj(
         #SBATCH --job-name=p{subj[4:]}
         #SBATCH --output={log_dir}/par{subj[4:]}.txt
         #SBATCH --time=30:00:00
-        #SBATCH --mem=4000
+        #SBATCH --cpus-per-task=3
+        #SBATCH --mem-per-cpu=4G
 
         import os
         import sys

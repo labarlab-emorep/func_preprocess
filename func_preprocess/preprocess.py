@@ -1,10 +1,11 @@
 """Preprocessing methods.
 
-FreeSurfer (deprecated), fMRIPrep, FSL, and AFNI
+RunFreeSurfer : setup and run freesurfer for subject
+fmriprep : run fMRIPrep for all
+FreeSurfer, fMRIPrep, FSL, and AFNI
 software used for preprocessing EmoRep data.
 
 """
-# %%
 import os
 import glob
 import shutil
@@ -13,57 +14,137 @@ from multiprocessing import Process
 from func_preprocess import submit, helper_tools
 
 
-# %%
-def freesurfer(work_fs, subj_t1, subj, sess, log_dir):
-    """Submit FreeSurfer for subject's session.
+class RunFreeSurfer:
+    """Run FreeSurfer's recon-all for a specific subject.
 
-    DEPRECATED
+    FreeSurfer SUBJECTS_DIR is organized by session.
 
-    Convert T1w NIfTI into Analyze format with FreeSurfer
-    directory organization. Run FreeSurfer.
-
-    Parameters
-    ----------
-    work_fs : path
-        Location of freesurfer derivative directory
-    subj_t1 : path
-        Location, file of rawdata T1w nii
-    subj : str
-        BIDS subject
-    sess : str
-        BIDS session
-    log_dir : path
-        Location of output directory for writing logs
-
-    Returns
+    Methods
     -------
-    bool
-        Whether FreeSurfer derivatives exist
+    recon_all()
+        Spawn a recon-all job for each session
+
+    Example
+    -------
+    run_fs = RunFreeSurfer(*args)
+    run_fs.recon_all(["ses-day2", "ses-day3"])
 
     """
-    fs_files = glob.glob(f"{work_fs}/**/aparc.a2009s+aseg.mgz", recursive=True)
-    if not fs_files:
-        bash_cmd = f"""
-            mri_convert {subj_t1} {work_fs}/{subj}/mri/orig/001.mgz
-            recon-all \
-                -subjid {subj} \
-                -all \
-                -sd {work_fs} \
-                -parallel \
-                -openmp 6
+
+    def __init__(self, subj, proj_raw, work_deriv, log_dir, run_local):
+        """Initialize.
+
+        Parameters
+        ----------
+        subj : str
+            BIDS subject
+        proj_raw : str, os.PathLike
+            Location of project rawdata directory
+        work_deriv : str, os.PathLike
+            Output location for pipeline intermediates
+        log_dir : str, os.PathLike
+            Location for capturing stdout/err
+
         """
-        print(f"Starting FreeSurfer for {subj}:\n\t{bash_cmd}\n")
-        _, _ = submit.sbatch(
-            bash_cmd,
-            f"{subj[4:]}{sess[4:]}_freesurfer",
-            log_dir,
-            num_cpus=6,
-            num_hours=10,
+        print("Initializing RunFreeSurfer")
+        self._subj = subj
+        self._proj_raw = proj_raw
+        self._work_deriv = work_deriv
+        self._log_dir = log_dir
+        self._run_local = run_local
+
+    def recon_all(self, sess_list):
+        """Spawn a freesurfer recon-all command for each session.
+
+        Parameters
+        ----------
+        sess_list : list
+            Session identifiers
+
+        """
+        mult_proc = [
+            Process(
+                target=self._exec_fs,
+                args=(sess,),
+            )
+            for sess in sess_list
+        ]
+        for proc in mult_proc:
+            proc.start()
+        for proc in mult_proc:
+            proc.join()
+
+    def _exec_fs(self, sess):
+        """Run FreeSurfer recon-all."""
+        self._sess = sess
+        self._work_fs = os.path.join(
+            self._work_deriv, "freesurfer", self._sess
         )
 
-    fs_files = glob.glob(f"{work_fs}/**/aparc.a2009s+aseg.mgz", recursive=True)
-    fs_exists = True if fs_files else False
-    return fs_exists
+        # Avoid repeating work
+        out_file = os.path.join(
+            self._work_fs, self._subj, "mri/aparc+aseg.mgz"
+        )
+        if os.path.exists(out_file):
+            return
+
+        # Check for required sess anat
+        if not os.path.exists(
+            os.path.join(self._proj_raw, self._subj, self._sess)
+        ):
+            print(f"Session rawdata not found for {self._subj} : {self._sess}")
+            return
+
+        # Construct recon-all command, execute
+        self._setup()
+        bash_list = [
+            "recon-all",
+            f"-subjid {self._subj}",
+            "-all",
+            f"-sd {self._work_fs}",
+            "-parallel",
+            "-openmp 6",
+        ]
+        _, _ = submit.submit_subprocess(
+            self._run_local,
+            " ".join(bash_list),
+            f"{self._subj[-4:]}_{self._sess[4:]}_freesurfer",
+            self._log_dir,
+            num_hours=8,
+            num_cpus=6,
+        )
+        if not os.path.exists(out_file):
+            raise FileNotFoundError(f"Expected FreeSurfer output : {out_file}")
+
+    def _setup(self):
+        """Setup freesurfer subject's directory, make 001.mgz."""
+
+        # Get rawdata T1w
+        subj_t1 = os.path.join(
+            self._proj_raw,
+            self._subj,
+            self._sess,
+            "anat",
+            f"{self._subj}_{self._sess}_T1w.nii.gz",
+        )
+        if not os.path.exists(subj_t1):
+            raise FileNotFoundError(
+                f"Missing rawdata T1w for : {self._subj}, {self._sess}"
+            )
+
+        # Setup data structure and convert nii-mgz
+        subj_fs = os.path.join(self._work_fs, self._subj, "mri/orig")
+        if os.path.exists(os.path.join(subj_fs, "001.mgz")):
+            return
+        if not os.path.exists(subj_fs):
+            os.makedirs(subj_fs)
+        bash_cmd = f"mri_convert {subj_t1} {subj_fs}/001.mgz"
+        _, _ = submit.submit_subprocess(
+            self._run_local,
+            bash_cmd,
+            f"{self._subj[-4:]}_{self._sess[4:]}_conv",
+            self._log_dir,
+        )
 
 
 def fmriprep(
