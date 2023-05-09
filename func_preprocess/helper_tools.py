@@ -111,7 +111,7 @@ class PullPush:
             -rauv {src} {dst}
         """
         job_out, job_err = submit.submit_subprocess(
-            False,
+            True,
             bash_cmd,
             f"{self._subj[-4:]}_{self.sess[4:]}_pullPush",
             self._log_dir,

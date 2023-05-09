@@ -13,7 +13,6 @@ def run_preproc(
     fs_license,
     fd_thresh,
     ignore_fmaps,
-    no_freesurfer,
     sing_afni,
     log_dir,
     run_local,
@@ -45,8 +44,6 @@ def run_preproc(
         Threshold for framewise displacement
     ignore_fmaps : bool
         Whether to incorporate fmaps in preprocessing
-    no_freesurfer : bool
-        Whether to use the --fs-no-reconall option
     sing_afni : path, str
         Location of afni singularity iamge
     log_dir : path
@@ -65,11 +62,11 @@ def run_preproc(
 
     """
     # Check types
-    for _chk_bool in [ignore_fmaps, no_freesurfer, run_local]:
+    for _chk_bool in [ignore_fmaps, run_local]:
         if not isinstance(_chk_bool, bool):
             raise TypeError(
                 "Expected bool type for options : --ignore_fmaps, "
-                + "--no_freesurfer, --run_local"
+                + "--run_local"
             )
     if not isinstance(fd_thresh, float):
         raise TypeError("Expected float type for --fd_thresh")
@@ -101,15 +98,14 @@ def run_preproc(
         sync_data.pull_rawdata(subj, "ses-day2")
         sync_data.pull_rawdata(subj, "ses-day3")
 
-    #
+    # Run FreeSurfer
     run_fs = preprocess.RunFreeSurfer(
         subj, proj_raw, work_deriv, log_dir, run_local
     )
     run_fs.recon_all(["ses-day2", "ses-day3"])
-    return
 
     # Run fMRIPrep
-    fp_dict = preprocess.fmriprep(
+    run_fp = preprocess.RunFmriprep(
         subj,
         proj_raw,
         work_deriv,
@@ -118,10 +114,12 @@ def run_preproc(
         fs_license,
         fd_thresh,
         ignore_fmaps,
-        no_freesurfer,
         log_dir,
         run_local,
     )
+    run_fp.fmriprep(["ses-day2", "ses-day3"])
+    fp_dict = run_fp.get_output()
+    return
 
     # Finish preprocessing with FSL, AFNI
     _ = preprocess.fsl_preproc(
@@ -139,7 +137,6 @@ def run_preproc(
             proj_deriv,
             work_deriv,
             subj,
-            no_freesurfer,
             log_dir,
         )
         sync_data.sess = "ses-all"

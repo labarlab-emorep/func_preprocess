@@ -1,14 +1,15 @@
 """Preprocessing methods.
 
 RunFreeSurfer : setup and run freesurfer for subject
-fmriprep : run fMRIPrep for all
-FreeSurfer, fMRIPrep, FSL, and AFNI
-software used for preprocessing EmoRep data.
+RunFmriprep : run fmriprep for each session
+fsl_preproc : conduct extra preprocessing steps
+copy_clean : move relevant files to group partition and purge work
 
 """
 import os
 import glob
 import shutil
+import json
 from typing import Union
 from multiprocessing import Process
 from func_preprocess import submit, helper_tools
@@ -21,7 +22,7 @@ class RunFreeSurfer:
 
     Methods
     -------
-    recon_all()
+    recon_all(sess_list)
         Spawn a recon-all job for each session
 
     Example
@@ -74,7 +75,7 @@ class RunFreeSurfer:
         for proc in mult_proc:
             proc.join()
 
-    def _exec_fs(self, sess):
+    def _exec_fs(self, sess: str):
         """Run FreeSurfer recon-all."""
         self._sess = sess
         self._work_fs = os.path.join(
@@ -119,6 +120,21 @@ class RunFreeSurfer:
     def _setup(self):
         """Setup freesurfer subject's directory, make 001.mgz."""
 
+        # Setup directory structures
+        proj_subj = os.path.join(
+            os.path.dirname(self._proj_raw),
+            "derivatives",
+            "pre_processing",
+            "fmriprep",
+            self._sess,
+            self._subj,
+        )
+        subj_fs = os.path.join(self._work_fs, self._subj, "mri/orig")
+        if os.path.exists(os.path.join(subj_fs, "001.mgz")):
+            return
+        for h_dir in [proj_subj, subj_fs]:
+            os.makedirs(h_dir, exist_ok=True)
+
         # Get rawdata T1w
         subj_t1 = os.path.join(
             self._proj_raw,
@@ -132,131 +148,138 @@ class RunFreeSurfer:
                 f"Missing rawdata T1w for : {self._subj}, {self._sess}"
             )
 
-        # Setup data structure and convert nii-mgz
-        subj_fs = os.path.join(self._work_fs, self._subj, "mri/orig")
-        if os.path.exists(os.path.join(subj_fs, "001.mgz")):
-            return
-        if not os.path.exists(subj_fs):
-            os.makedirs(subj_fs)
+        # Convert anat nifti to mgz
         bash_cmd = f"mri_convert {subj_t1} {subj_fs}/001.mgz"
         _, _ = submit.submit_subprocess(
-            self._run_local,
+            True,
             bash_cmd,
             f"{self._subj[-4:]}_{self._sess[4:]}_conv",
             self._log_dir,
         )
 
 
-def fmriprep(
-    subj,
-    proj_raw,
-    work_deriv,
-    sing_fmriprep,
-    tplflow_dir,
-    fs_license,
-    fd_thresh,
-    ignore_fmaps,
-    no_freesurfer,
-    log_dir,
-    run_local,
-):
-    """Run fMRIPrep for single subject.
+class RunFmriprep:
+    """Run fMRIPrep for a specific subject.
 
-    Conduct FreeSurfer and fMRIPrep routines on a subject's
-    data. References the MNI152NLin6Asym space for AROMA.
-
-    Parameters
-    ----------
-    subj : str
-        BIDS subject
-    proj_raw : path
-        Location of project rawdata directory
-    work_deriv : path
-        Output location for pipeline intermediates, e.g.
-        /work/foo/project/derivatives
-    sing_fmriprep : path, str
-        Location and image of fmriprep singularity file
-    tplflow_dir : path, str
-        Clone location of templateflow
-    fs_license : path, str
-        Location of FreeSurfer license
-    fd_thresh : float
-        Threshold for framewise displacement
-    ignore_fmaps : bool
-        Whether to incorporate fmaps in preprocessing
-    no_freesurfer : bool
-        Whether to use the --fs-no-reconall option
-    log_dir : path
-        Location of directory to capture logs
-    run_local : bool
-        Whether job, subprocesses are run locally
-
-    Returns
+    Methods
     -------
-    dict
-        "preproc_bold": ["/paths/to/*preproc_bold.nii.gz"]
-        "mask_bold": ["/paths/to/*run-*desc-brain_mask.nii.gz"]
-        "mask_anat": "/path/to/anat/*_res-2_desc-brain_mask.nii.gz"
+    fmriprep(sess_list)
+        Spawn an fmriprep job for each session
+    get_output()
+        Return a dict of fmriprep output
 
-    Raises
-    ------
-    FileNotFoundError
-        <subj>.html missing
-        Different lengths of dict["aroma_bold"] and dict["mask_bold"]
-        Missing preproc or mask files
+    Example
+    -------
+    run_fp = RunFmriprep(*args)
+    run_fp.fmriprep(["ses-day2", "ses-day3"])
+    fp_dict = run_fp.get_output()
 
     """
-    # Setup fmriprep specific dir/paths
-    fs_license_dir = os.path.dirname(fs_license)
-    work_fs = os.path.join(work_deriv, "freesurfer")
-    work_fp = os.path.join(work_deriv, "fmriprep")
-    work_fp_tmp = os.path.join(work_fp, "tmp_work", subj)
-    work_fp_bids = os.path.join(work_fp_tmp, "bids_layout")
-    if not os.path.exists(work_fp_bids):
-        os.makedirs(work_fp_bids)
 
-    # Construct fmriprep call
-    check_file = f"{work_fp}/{subj}.html"
-    if not os.path.exists(check_file):
-        bash_list = [
-            "singularity run",
-            "--cleanenv",
-            f"--bind {proj_raw}:{proj_raw}",
-            f"--bind {work_deriv}:{work_deriv}",
-            f"--bind {tplflow_dir}:{tplflow_dir}",
-            f"--bind {fs_license_dir}:{fs_license_dir}",
-            f"--bind {proj_raw}:/data",
-            f"--bind {work_fp}:/out",
-            f"{sing_fmriprep} /data /out participant",
-            f"--work-dir {work_fp_tmp}",
-            f"--participant-label {subj[4:]}",
-            "--skull-strip-template MNI152NLin6Asym",
-            "--output-spaces MNI152NLin6Asym:res-2",
-            f"--fs-license {fs_license}",
-            f"--fs-subjects-dir {work_fs}",
-            "--use-aroma",
-            f"--fd-spike-threshold {fd_thresh}",
-            "--skip-bids-validation",
-            f"--bids-database-dir {work_fp_bids}",
-            "--nthreads 10 --omp-nthreads 10",
-            "--stop-on-first-crash",
-            "--debug all",
+    def __init__(
+        self,
+        subj,
+        proj_raw,
+        work_deriv,
+        sing_fmriprep,
+        tplflow_dir,
+        fs_license,
+        fd_thresh,
+        ignore_fmaps,
+        log_dir,
+        run_local,
+    ):
+        """Initialize.
+
+        Parameters
+        ----------
+        subj : str
+            BIDS subject
+        proj_raw : path
+            Location of project rawdata directory
+        work_deriv : path
+            Output location for pipeline intermediates, e.g.
+            /work/foo/project/derivatives
+        sing_fmriprep : path, str
+            Location and image of fmriprep singularity file
+        tplflow_dir : path, str
+            Clone location of templateflow
+        fs_license : path, str
+            Location of FreeSurfer license
+        fd_thresh : float
+            Threshold for framewise displacement
+        ignore_fmaps : bool
+            Whether to incorporate fmaps in preprocessing
+        log_dir : path
+            Location of directory to capture logs
+        run_local : bool
+            Whether job, subprocesses are run locally
+
+        """
+        print("Initializing RunFmriprep")
+        self._subj = subj
+        self._proj_raw = proj_raw
+        self._work_deriv = work_deriv
+        self._sing_fmriprep = sing_fmriprep
+        self._tplflow_dir = tplflow_dir
+        self._fs_license = fs_license
+        self._fs_license_dir = os.path.dirname(fs_license)
+        self._fd_thresh = fd_thresh
+        self._ignore_fmaps = ignore_fmaps
+        self._log_dir = log_dir
+        self._run_local = run_local
+
+    def fmriprep(self, sess_list):
+        """Spawn an fMRIPrep job for each session.
+
+        Parameters
+        ----------
+        sess_list : list
+            Session identifiers
+
+        """
+        mult_proc = [
+            Process(
+                target=self._exec_fp,
+                args=(sess,),
+            )
+            for sess in sess_list
         ]
+        for proc in mult_proc:
+            proc.start()
+        for proc in mult_proc:
+            proc.join()
 
-        # Adjust fmriprep call from user input
-        if ignore_fmaps:
-            bash_list.append("--ignore fieldmaps")
+    def _exec_fp(self, sess):
+        """Setup for, write, and execute fmriprep."""
+        # Avoid repeating work
+        self._sess = sess
+        self._work_fp = os.path.join(self._work_deriv, "fmriprep", self._sess)
+        check_file = os.path.join(self._work_fp, f"{self._subj}.html")
+        if os.path.exists(check_file):
+            return
 
-        if no_freesurfer:
-            bash_list.append("--fs-no-reconall")
+        # Check and setup
+        self._work_fs = os.path.join(
+            self._work_deriv, "freesurfer", self._sess
+        )
+        if not os.path.exists(os.path.join(self._work_fs, self._subj)):
+            raise FileNotFoundError(
+                f"Expected freesurfer output for {self._subj} "
+                + f"at : {self._work_fs}"
+            )
+        self._work_fp_tmp = os.path.join(self._work_fp, "tmp_work", self._subj)
+        self._work_fp_bids = os.path.join(self._work_fp_tmp, "bids_layout")
+        os.makedirs(self._work_fp_bids, exist_ok=True)
 
-        # Submit fmriprep call
-        bash_cmd = " ".join(bash_list)
+        # Write and execute command
+        self._write_filter()
+        bash_fmriprep = self._write_fmriprep()
         std_out, std_err = submit.submit_subprocess(
-            run_local,
-            bash_cmd,
-            f"{subj[7:]}_fmriprep",
-            log_dir,
+            self._run_local,
+            bash_fmriprep,
+            f"{self._subj[-4:]}_{self._sess[4:]}_fmriprep",
+            self._log_dir,
             mem_gig=12,
             num_cpus=10,
             num_hours=40,
@@ -266,56 +289,84 @@ def fmriprep(
         if not os.path.exists(check_file):
             print(f"\nstdout : {std_out}\nstderr : {std_err}")
             raise FileNotFoundError(
-                f"FMRIPrep output file {subj}.html not found."
+                f"Missing fMRIPrep output for {self._subj}, {self._sess}"
             )
 
-    # Clean fmriprep work, freesurfer
-    try:
-        shutil.rmtree(work_fp_tmp)
-        shutil.rmtree(f"{work_fs}/{subj}")
-    except FileNotFoundError:
-        print("FreeSurfer output not found, continuing.")
-
-    # Make list of needed files for FSL denoising
-    preproc_bold = sorted(
-        glob.glob(
-            f"{work_fp}/{subj}/**/func/*desc-preproc_bold.nii.gz",
-            recursive=True,
+    def _write_filter(self):
+        """Write fMRIPrep filter for bold session."""
+        filt_dict = {"bold": {"session": self._sess}}
+        self._json_filt = os.path.join(
+            self._log_dir, f"{self._subj}_{self._sess}_filt.json"
         )
-    )
-    mask_bold = sorted(
-        glob.glob(
-            f"{work_fp}/{subj}/**/func/*desc-brain_mask.nii.gz",
-            recursive=True,
+        with open(self._json_filt, "w") as jf:
+            json.dump(filt_dict, jf)
+
+    def _write_fmriprep(self) -> str:
+        """Return fMRIPrep singulartity call.."""
+        bash_list = [
+            "singularity run",
+            "--cleanenv",
+            f"--bind {self._proj_raw}:{self._proj_raw}",
+            f"--bind {self._work_deriv}:{self._work_deriv}",
+            f"--bind {self._tplflow_dir}:{self._tplflow_dir}",
+            f"--bind {self._fs_license_dir}:{self._fs_license_dir}",
+            f"--bind {self._proj_raw}:/data",
+            f"--bind {self._work_fp}:/out",
+            f"{self._sing_fmriprep} /data /out participant",
+            f"--work-dir {self._work_fp_tmp}",
+            f"--participant-label {self._subj[4:]}",
+            "--skull-strip-template MNI152NLin6Asym",
+            "--output-spaces MNI152NLin6Asym:res-2",
+            f"--bids-filter-file {self._json_filt}",
+            f"--fs-license {self._fs_license}",
+            f"--fs-subjects-dir {self._work_fs}",
+            "--use-aroma",
+            f"--fd-spike-threshold {self._fd_thresh}",
+            "--skip-bids-validation",
+            f"--bids-database-dir {self._work_fp_bids}",
+            "--nthreads 10 --omp-nthreads 10",
+            "--stop-on-first-crash",
+            "--debug all",
+        ]
+
+        # Adjust fmriprep call from user input
+        if self._ignore_fmaps:
+            bash_list.append("--ignore fieldmaps")
+        return " ".join(bash_list)
+
+    def get_output(self):
+        """Return dictionary of files for extra preprocessing."""
+
+        # Make list of needed files for FSL denoising
+        search_path = f"{self._work_deriv}/fmriprep/**/{self._subj}/**/func"
+        preproc_bold = sorted(
+            glob.glob(
+                f"{search_path}/*desc-preproc_bold.nii.gz",
+                recursive=True,
+            )
         )
-    )
-
-    # Find anatomical mask based on multiple or single sessions
-    mask_str = f"{subj}_*_res-2_desc-brain_mask.nii.gz"
-    try:
-        anat_path = f"{work_fp}/{subj}/anat"
-        mask_anat = sorted(glob.glob(f"{anat_path}/{mask_str}"))[0]
-    except IndexError:
-        anat_path = f"{work_fp}/{subj}/ses-*/anat"
-        mask_anat = sorted(glob.glob(f"{anat_path}/{mask_str}"))[0]
-
-    # Check lists
-    if not preproc_bold and not mask_bold and not mask_anat:
-        raise FileNotFoundError(f"Missing fMRIPrep output for {subj}.")
-
-    if len(preproc_bold) != len(mask_bold):
-        raise FileNotFoundError(
-            "Number of preprocessed and mask bold files not equal."
+        mask_bold = sorted(
+            glob.glob(
+                f"{search_path}/*desc-brain_mask.nii.gz",
+                recursive=True,
+            )
         )
 
-    return {
-        "preproc_bold": preproc_bold,
-        "mask_bold": mask_bold,
-        "mask_anat": mask_anat,
-    }
+        # Check lists
+        if not preproc_bold and not mask_bold:
+            raise FileNotFoundError(
+                f"Missing fMRIPrep output for {self._subj}."
+            )
+        if len(preproc_bold) != len(mask_bold):
+            raise FileNotFoundError(
+                "Number of preprocessed and mask bold files not equal."
+            )
+        return {
+            "preproc_bold": preproc_bold,
+            "mask_bold": mask_bold,
+        }
 
 
-# %%
 def fsl_preproc(work_fsl, fp_dict, sing_afni, subj, log_dir, run_local):
     """Conduct extra preprocessing via FSL and AFNI.
 
@@ -372,10 +423,7 @@ def fsl_preproc(work_fsl, fp_dict, sing_afni, subj, log_dir, run_local):
         # Setup output location
         sess = "ses-" + run_epi.split("ses-")[1].split("/")[0]
         out_dir = os.path.join(work_fsl, subj, sess, "func")
-        try:
-            os.makedirs(out_dir)
-        except FileExistsError:
-            pass
+        os.makedirs(out_dir, exist_ok=True)
         afni_fsl.set_subj(subj, out_dir)
 
         # Set up filenames, check for work
@@ -446,7 +494,7 @@ def fsl_preproc(work_fsl, fp_dict, sing_afni, subj, log_dir, run_local):
     return scaled_files
 
 
-def copy_clean(proj_deriv, work_deriv, subj, no_freesurfer, log_dir):
+def copy_clean(proj_deriv, work_deriv, subj, log_dir):
     """Housekeeping for data.
 
     Delete unneeded files from work_deriv, copy remaining to
@@ -462,8 +510,6 @@ def copy_clean(proj_deriv, work_deriv, subj, no_freesurfer, log_dir):
         /work/foo/EmoRep_BIDS/derivatives
     subj : str
         BIDS subject
-    no_freesurfer : bool
-        Whether to use the --fs-no-reconall option
     log_dir : path
         Location of directory to capture logs
 
@@ -475,24 +521,29 @@ def copy_clean(proj_deriv, work_deriv, subj, no_freesurfer, log_dir):
     cp_cmd = f"cp -r {work_fsl_subj} {proj_fsl_subj}"
     _, _ = submit.submit_subprocess(True, cp_cmd, f"{subj[7:]}_cp", log_dir)
 
-    # Copy fMRIPrep files, reflect freesurfer choice
-    print("\n\tCopying fMRIPrep files ...")
-    work_fp_subj = os.path.join(work_deriv, "fmriprep", subj)
-    work_fp = os.path.dirname(work_fp_subj)
-    proj_fp = os.path.join(proj_deriv, "fmriprep")
-    keep_fmriprep = [
-        f"{subj}.html",
-    ]
-    if not no_freesurfer:
-        keep_fmriprep.append("desc-aparcaseg_dseg.tsv")
-        keep_fmriprep.append("desc-aseg_dseg.tsv")
-    for kp_file in keep_fmriprep:
-        shutil.copyfile(f"{work_fp}/{kp_file}", f"{proj_fp}/{kp_file}")
+    # # Copy FreeSurfer files to proj_deriv, use faster bash
+    # # TODO
+    # print("\n\tCopying fsl_denoise files ...")
+    # work_fs_subj = os.path.join(work_deriv, "fsl_denoise", subj)
+    # proj_fs_subj = os.path.join(proj_deriv, "fsl_denoise", subj)
+    # cp_cmd = f"cp -r {work_fsl_subj} {proj_fsl_subj}"
+    # _, _ = submit.submit_subprocess(True, cp_cmd, f"{subj[7:]}_cp", log_dir)
 
-    proj_fp_subj = os.path.join(proj_fp, subj)
-    cp_cmd = f"cp -r {work_fp_subj} {proj_fp_subj}"
-    _, _ = submit.submit_subprocess(True, cp_cmd, f"{subj[7:]}_cp", log_dir)
+    # # Copy fMRIPrep files, reflect freesurfer choice
+    # print("\n\tCopying fMRIPrep files ...")
+    # work_fp_subj = os.path.join(work_deriv, "fmriprep", subj)
+    # work_fp = os.path.dirname(work_fp_subj)
+    # proj_fp = os.path.join(proj_deriv, "fmriprep")
+    # keep_fmriprep = [
+    #     f"{subj}.html",
+    # ]
+    # for kp_file in keep_fmriprep:
+    #     shutil.copyfile(f"{work_fp}/{kp_file}", f"{proj_fp}/{kp_file}")
 
-    # Turn out the lights
-    shutil.rmtree(work_fp_subj)
-    shutil.rmtree(work_fsl_subj)
+    # proj_fp_subj = os.path.join(proj_fp, subj)
+    # cp_cmd = f"cp -r {work_fp_subj} {proj_fp_subj}"
+    # _, _ = submit.submit_subprocess(True, cp_cmd, f"{subj[7:]}_cp", log_dir)
+
+    # # Turn out the lights
+    # shutil.rmtree(work_fp_subj)
+    # shutil.rmtree(work_fsl_subj)

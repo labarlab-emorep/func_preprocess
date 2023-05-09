@@ -37,7 +37,6 @@ func_preprocess -s sub-ER0009 --rsa-key $RSA_LS2
 func_preprocess \
     -s sub-ER0009 sub-ER0010 \
     --rsa-key $RSA_LS2 \
-    --no-freesurfer \
     --fd-thresh 0.2 \
     --ignore-fmaps
 
@@ -89,16 +88,6 @@ def _get_args():
         ),
     )
     parser.add_argument(
-        "--no-freesurfer",
-        action="store_true",
-        help=textwrap.dedent(
-            """\
-            Whether to use the --fs-no-reconall option with fmriprep,
-            True if "--no--freesurfer" else False.
-            """
-        ),
-    )
-    parser.add_argument(
         "--proj-dir",
         type=str,
         default="/hpc/group/labarlab/EmoRep/Exp2_Compute_Emotion/data_scanner_BIDS",  # noqa: E501
@@ -113,7 +102,7 @@ def _get_args():
     parser.add_argument(
         "--rsa-key",
         type=str,
-        help="Location of labarserv2 RSA key",
+        help="Required on DCC; location of labarserv2 RSA key",
     )
     parser.add_argument(
         "--run-local",
@@ -174,7 +163,6 @@ def main():
     proj_dir = args.proj_dir
     work_deriv = args.work_dir
     ignore_fmaps = args.ignore_fmaps
-    no_freesurfer = args.no_freesurfer
     fd_thresh = args.fd_thresh
     run_local = args.run_local
     rsa_key = args.rsa_key
@@ -186,6 +174,8 @@ def main():
         raise FileNotFoundError(f"Expected to find directory : {work_deriv}")
     if not os.path.exists(proj_dir):
         raise FileNotFoundError(f"Expected to find directory : {proj_dir}")
+    if not run_local and rsa_key is None:
+        raise ValueError("RSA key required on DCC")
     proj_raw = os.path.join(proj_dir, "rawdata")
     proj_deriv = os.path.join(proj_dir, "derivatives/pre_processing")
 
@@ -235,7 +225,6 @@ def main():
             fs_license,
             fd_thresh,
             ignore_fmaps,
-            no_freesurfer,
             sing_afni,
             log_dir,
             run_local,

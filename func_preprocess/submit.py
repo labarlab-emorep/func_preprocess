@@ -16,7 +16,7 @@ def submit_subprocess(
 ):
     """Run bash commands as subprocesses.
 
-    Schedule a SBATCH subprocess when run_local=True, otherwise
+    Schedule a SBATCH subprocess when run_local=False, otherwise
     submit normal subprocess.
 
     Parameters
@@ -95,7 +95,6 @@ def schedule_subj(
     fs_license,
     fd_thresh,
     ignore_fmaps,
-    no_freesurfer,
     sing_afni,
     log_dir,
     run_local,
@@ -130,8 +129,6 @@ def schedule_subj(
         Threshold for framewise displacement
     ignore_fmaps : bool
         Whether to incorporate fmaps in preprocessing
-    no_freesurfer : bool
-        Whether to use the --fs-no-reconall option
     sing_afni : path, str
         Location of afni singularity iamge
     log_dir : path
@@ -171,7 +168,6 @@ def schedule_subj(
             "{fs_license}",
             {fd_thresh},
             {ignore_fmaps},
-            {no_freesurfer},
             "{sing_afni}",
             "{log_dir}",
             {run_local},
