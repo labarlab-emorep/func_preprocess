@@ -3,12 +3,10 @@
 RunFreeSurfer : setup and run freesurfer for subject
 RunFmriprep : run fmriprep for each session
 fsl_preproc : conduct extra preprocessing steps
-copy_clean : move relevant files to group partition and purge work
 
 """
 import os
 import glob
-import shutil
 import json
 from typing import Union
 from multiprocessing import Process
@@ -125,7 +123,7 @@ class RunFreeSurfer:
             os.path.dirname(self._proj_raw),
             "derivatives",
             "pre_processing",
-            "fmriprep",
+            "freesurfer",
             self._sess,
             self._subj,
         )
@@ -293,8 +291,24 @@ class RunFmriprep:
             )
 
     def _write_filter(self):
-        """Write fMRIPrep filter for bold session."""
-        filt_dict = {"bold": {"session": self._sess}}
+        """Write PyBIDS session filter."""
+        filt_dict = {
+            "bold": {
+                "datatype": "func",
+                "suffix": "bold",
+                "session": self._sess[4:],
+            },
+            "t1w": {
+                "datatype": "anat",
+                "suffix": "T1w",
+                "session": self._sess[4:],
+            },
+            "fmap": {
+                "datatype": "fmap",
+                "suffix": "epi",
+                "session": self._sess[4:],
+            },
+        }
         self._json_filt = os.path.join(
             self._log_dir, f"{self._subj}_{self._sess}_filt.json"
         )
@@ -307,6 +321,7 @@ class RunFmriprep:
             "singularity run",
             "--cleanenv",
             f"--bind {self._proj_raw}:{self._proj_raw}",
+            f"--bind {self._log_dir}:{self._log_dir}",
             f"--bind {self._work_deriv}:{self._work_deriv}",
             f"--bind {self._tplflow_dir}:{self._tplflow_dir}",
             f"--bind {self._fs_license_dir}:{self._fs_license_dir}",
@@ -324,7 +339,7 @@ class RunFmriprep:
             f"--fd-spike-threshold {self._fd_thresh}",
             "--skip-bids-validation",
             f"--bids-database-dir {self._work_fp_bids}",
-            "--nthreads 10 --omp-nthreads 10",
+            "--nthreads 10 --omp-nthreads 8",
             "--stop-on-first-crash",
             "--debug all",
         ]
@@ -338,19 +353,13 @@ class RunFmriprep:
         """Return dictionary of files for extra preprocessing."""
 
         # Make list of needed files for FSL denoising
-        search_path = f"{self._work_deriv}/fmriprep/**/{self._subj}/**/func"
+        search_path = (
+            f"{self._work_deriv}/fmriprep/ses-*/{self._subj}/ses-*/func"
+        )
         preproc_bold = sorted(
-            glob.glob(
-                f"{search_path}/*desc-preproc_bold.nii.gz",
-                recursive=True,
-            )
+            glob.glob(f"{search_path}/*desc-preproc_bold.nii.gz")
         )
-        mask_bold = sorted(
-            glob.glob(
-                f"{search_path}/*desc-brain_mask.nii.gz",
-                recursive=True,
-            )
-        )
+        mask_bold = sorted(glob.glob(f"{search_path}/*desc-brain_mask.nii.gz"))
 
         # Check lists
         if not preproc_bold and not mask_bold:
@@ -367,7 +376,7 @@ class RunFmriprep:
         }
 
 
-def fsl_preproc(work_fsl, fp_dict, sing_afni, subj, log_dir, run_local):
+def fsl_preproc(work_deriv, fp_dict, sing_afni, subj, log_dir, run_local):
     """Conduct extra preprocessing via FSL and AFNI.
 
     Bandpass filter and mask each EPI run, scale EPI timeseries by
@@ -375,9 +384,8 @@ def fsl_preproc(work_fsl, fp_dict, sing_afni, subj, log_dir, run_local):
 
     Parameters
     ----------
-    work_fsl : path
-        Location of FSL derivatives, e.g.
-        /work/foo/EmoRep_BIDS/derivatives/fsl
+    work_deriv : str, os.PathLike
+        Output location for pipeline intermediates
     fp_dict : dict
         Returned from preprocessing.fmriprep, contains
         paths to preprocessed BOLD and mask files. Required keys:
@@ -414,6 +422,7 @@ def fsl_preproc(work_fsl, fp_dict, sing_afni, subj, log_dir, run_local):
             raise KeyError(f"Expected key in fp_dict : {_key}")
 
     # Mutliprocess extra preprocessing steps across runs
+    work_fsl = os.path.join(work_deriv, "fsl_denoise")
     afni_fsl = helper_tools.AfniFslMethods(log_dir, run_local, sing_afni)
 
     def _preproc(
@@ -435,27 +444,23 @@ def fsl_preproc(work_fsl, fp_dict, sing_afni, subj, log_dir, run_local):
             return
 
         # Find mean timeseries, bandpass filter, and mask
-        run_scaled = os.path.join(
-            out_dir, f"{file_prefix}desc-scaled_bold.nii.gz"
+        run_tmean = afni_fsl.tmean(
+            run_epi, f"{file_prefix}desc-tmean_bold.nii.gz"
         )
-        if not os.path.exists(run_scaled):
-            run_tmean = afni_fsl.tmean(
-                run_epi, f"{file_prefix}desc-tmean_bold.nii.gz"
-            )
-            run_bandpass = afni_fsl.bandpass(
-                run_epi, run_tmean, f"{file_prefix}desc-tfilt_bold.nii.gz"
-            )
-            run_masked = afni_fsl.mask_epi(
-                run_bandpass,
-                run_mask,
-                f"{file_prefix}desc-tfiltMasked_bold.nii.gz",
-            )
+        run_bandpass = afni_fsl.bandpass(
+            run_epi, run_tmean, f"{file_prefix}desc-tfilt_bold.nii.gz"
+        )
+        run_masked = afni_fsl.mask_epi(
+            run_bandpass,
+            run_mask,
+            f"{file_prefix}desc-tfiltMasked_bold.nii.gz",
+        )
 
-            # Scale timeseries and smooth
-            med_value = afni_fsl.median(run_masked, run_mask)
-            run_scaled = afni_fsl.scale(
-                run_masked, f"{file_prefix}desc-scaled_bold.nii.gz", med_value
-            )
+        # Scale timeseries and smooth
+        med_value = afni_fsl.median(run_masked, run_mask)
+        run_scaled = afni_fsl.scale(
+            run_masked, f"{file_prefix}desc-scaled_bold.nii.gz", med_value
+        )
         _ = afni_fsl.smooth(run_scaled, 4, os.path.basename(run_smoothed))
 
     mult_proc = [
@@ -492,58 +497,3 @@ def fsl_preproc(work_fsl, fp_dict, sing_afni, subj, log_dir, run_local):
     for rm_file in remove_files:
         os.remove(rm_file)
     return scaled_files
-
-
-def copy_clean(proj_deriv, work_deriv, subj, log_dir):
-    """Housekeeping for data.
-
-    Delete unneeded files from work_deriv, copy remaining to
-    the proj_deriv location.
-
-    Parameters
-    ----------
-    proj_deriv : path
-        Project derivative location, e.g.
-        /hpc/group/labarlab/EmoRep_BIDS/derivatives
-    work_deirv : path
-        Working derivative location, e.g.
-        /work/foo/EmoRep_BIDS/derivatives
-    subj : str
-        BIDS subject
-    log_dir : path
-        Location of directory to capture logs
-
-    """
-    # Copy remaining FSL files to proj_deriv, use faster bash
-    print("\n\tCopying fsl_denoise files ...")
-    work_fsl_subj = os.path.join(work_deriv, "fsl_denoise", subj)
-    proj_fsl_subj = os.path.join(proj_deriv, "fsl_denoise", subj)
-    cp_cmd = f"cp -r {work_fsl_subj} {proj_fsl_subj}"
-    _, _ = submit.submit_subprocess(True, cp_cmd, f"{subj[7:]}_cp", log_dir)
-
-    # # Copy FreeSurfer files to proj_deriv, use faster bash
-    # # TODO
-    # print("\n\tCopying fsl_denoise files ...")
-    # work_fs_subj = os.path.join(work_deriv, "fsl_denoise", subj)
-    # proj_fs_subj = os.path.join(proj_deriv, "fsl_denoise", subj)
-    # cp_cmd = f"cp -r {work_fsl_subj} {proj_fsl_subj}"
-    # _, _ = submit.submit_subprocess(True, cp_cmd, f"{subj[7:]}_cp", log_dir)
-
-    # # Copy fMRIPrep files, reflect freesurfer choice
-    # print("\n\tCopying fMRIPrep files ...")
-    # work_fp_subj = os.path.join(work_deriv, "fmriprep", subj)
-    # work_fp = os.path.dirname(work_fp_subj)
-    # proj_fp = os.path.join(proj_deriv, "fmriprep")
-    # keep_fmriprep = [
-    #     f"{subj}.html",
-    # ]
-    # for kp_file in keep_fmriprep:
-    #     shutil.copyfile(f"{work_fp}/{kp_file}", f"{proj_fp}/{kp_file}")
-
-    # proj_fp_subj = os.path.join(proj_fp, subj)
-    # cp_cmd = f"cp -r {work_fp_subj} {proj_fp_subj}"
-    # _, _ = submit.submit_subprocess(True, cp_cmd, f"{subj[7:]}_cp", log_dir)
-
-    # # Turn out the lights
-    # shutil.rmtree(work_fp_subj)
-    # shutil.rmtree(work_fsl_subj)

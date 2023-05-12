@@ -87,6 +87,7 @@ def submit_subprocess(
 
 def schedule_subj(
     subj,
+    sess_list,
     proj_raw,
     proj_deriv,
     work_deriv,
@@ -110,6 +111,8 @@ def schedule_subj(
     ----------
     subj : str
         BIDS subject identifier
+    sess_list : list
+        BIDS session identifiers
     proj_raw : path
         Location of project rawdata, e.g.
         /hpc/group/labarlab/EmoRep_BIDS/rawdata
@@ -150,7 +153,7 @@ def schedule_subj(
 
         #SBATCH --job-name=p{subj[4:]}
         #SBATCH --output={log_dir}/par{subj[4:]}.txt
-        #SBATCH --time=30:00:00
+        #SBATCH --time=40:00:00
         #SBATCH --cpus-per-task=3
         #SBATCH --mem-per-cpu=4G
 
@@ -160,6 +163,7 @@ def schedule_subj(
 
         workflows.run_preproc(
             "{subj}",
+            {sess_list},
             "{proj_raw}",
             "{proj_deriv}",
             "{work_deriv}",

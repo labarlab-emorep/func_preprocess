@@ -7,6 +7,59 @@ from typing import Union, Tuple
 from func_preprocess import submit
 
 
+def copy_clean(subj, sess_list, proj_deriv, work_deriv, log_dir):
+    """Housekeeping for data.
+
+    Delete unneeded files from work_deriv, copy remaining to
+    the proj_deriv location.
+
+    Parameters
+    ----------
+    subj : str
+        BIDS subject
+    sess_list : list
+        BIDS session identifiers
+    proj_deriv : path
+        Project derivative location, e.g.
+        /hpc/group/labarlab/EmoRep_BIDS/derivatives
+    work_deirv : path
+        Working derivative location, e.g.
+        /work/foo/EmoRep_BIDS/derivatives
+    log_dir : path
+        Location of directory to capture logs
+
+    """
+    # Setup source, destination for fsl preprocessing
+    work_fsl_subj = f"{work_deriv}/fsl_denoise/{subj}"
+    proj_fsl_subj = f"{proj_deriv}/fsl_denoise"
+    if not os.path.exists(proj_fsl_subj):
+        os.makedirs(proj_fsl_subj)
+    map_dest = {work_fsl_subj: proj_fsl_subj}
+
+    # Source, destination for fmriprep, freesurfer
+    for sess in sess_list:
+        work_fp = f"{work_deriv}/fmriprep/{sess}/{subj}/*"
+        proj_fp = f"{proj_deriv}/fmriprep/{subj}"
+        if not os.path.exists(proj_fp):
+            os.makedirs(proj_fp)
+        map_dest[work_fp] = proj_fp
+
+        work_fp_html = f"{work_deriv}/fmriprep/{sess}/{subj}.html"
+        proj_fp_html = f"{proj_deriv}/fmriprep/{subj}_{sess}.html"
+        map_dest[work_fp_html] = proj_fp_html
+
+        work_fs = os.path.join(work_deriv, "freesurfer", sess, subj)
+        proj_fs = os.path.join(proj_deriv, "freesurfer", sess)
+        if not os.path.exists(proj_fs):
+            os.makedirs(proj_fs)
+        map_dest[work_fs] = proj_fs
+
+    for src, dst in map_dest.items():
+        _, _ = submit.submit_subprocess(
+            True, f"cp -r {src} {dst} #&& rm -r {src}", "cp", log_dir
+        )
+
+
 class PullPush:
     """Interact with Keoki to get and send data.
 
@@ -206,15 +259,20 @@ class FslMethods:
             )
         return True
 
-    def _get_run(self, epi_path: Union[str, os.PathLike]) -> str:
-        """Return run number."""
-        return os.path.basename(epi_path).split("run-")[1].split("_")[0][1]
+    def _parse_epi(self, epi_path: Union[str, os.PathLike]) -> Tuple:
+        """Return BIDS sub, ses, task, and run values."""
+        out_list = []
+        for field in ["sub-", "ses-", "task-", "run-"]:
+            bids_value = (
+                os.path.basename(epi_path).split(field)[1].split("_")[0]
+            )
+            out_list.append(bids_value)
+        return tuple(out_list)
 
     def _job_name(self, epi_path: Union[str, os.PathLike], name: str) -> str:
         """Return job name, including session and run number."""
-        run_num = self._get_run(epi_path)
-        sess = os.path.basename(epi_path).split("ses-")[1].split("_")[0]
-        return f"{self.subj[-4:]}_{sess}_r{run_num}_{name}"
+        _, _sess, _task, _run = self._parse_epi(epi_path)
+        return f"{self.subj[-4:]}_{_sess}_{_task}_r{_run[-1]}_{name}"
 
     def tmean(
         self,
@@ -450,8 +508,10 @@ class AfniFslMethods(FslMethods):
         self._chk_path(mask_path)
 
         print("\tCalculating median voxel value")
-        run_num = self._get_run(in_epi)
-        out_path = os.path.join(self.out_dir, f"tmp_run{run_num}_median.txt")
+        _, _, _task, _run = self._parse_epi(in_epi)
+        out_path = os.path.join(
+            self.out_dir, f"tmp_{_task}_r{_run[-1]}_median.txt"
+        )
         work_mask = os.path.join(self.out_dir, os.path.basename(mask_path))
         cp_list = ["cp", mask_path, work_mask, ";"]
         bash_list = [

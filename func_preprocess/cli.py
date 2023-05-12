@@ -203,7 +203,7 @@ def main():
     now_time = datetime.now()
     log_dir = os.path.join(
         os.path.dirname(work_deriv),
-        f"logs/func_preproc_{now_time.strftime('%y-%m-%d_%H:%M')}",
+        f"logs/func_preproc_{now_time.strftime('%y%m%d_%H%M')}",
     )
     if not os.path.exists(log_dir):
         os.makedirs(log_dir)
@@ -217,6 +217,7 @@ def main():
     for subj in subj_list:
         wf_args = [
             subj,
+            ["ses-day2", "ses-day3"],
             proj_raw,
             proj_deriv,
             work_deriv,
