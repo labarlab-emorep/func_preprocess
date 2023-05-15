@@ -11,4 +11,5 @@ setup(
             "func_preprocess=func_preprocess.cli:main",
         ]
     },
+    install_requires=["setuptools>=65.5.1"],
 )

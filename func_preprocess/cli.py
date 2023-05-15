@@ -1,21 +1,23 @@
 r"""Conduct preprocessing for EmoRep.
 
-Run participants through fMRIPrep preprocessing and then add
-additional steps in FSL for denoising and masking.
+Download required data from Keoki, preprocess EPI data via FreeSurfer,
+fMRIPrep, and extra FSL and AFNI steps. Generates scaled and smoothed
+EPI output. Upload files to Keoki. Sessions are treated independently
+for FreeSurfer and fMRIPrep.
 
-The pipeline workflow writes files to <work_dir>, and when finished
-purges some intermediates and saves final files to <proj_dir>.
+The workflow writes files to <work_dir>, and when finished purges
+some intermediates and saves final files to <proj_dir>.
 Specifically, final files are saved to:
     <proj-dir>/derivatives/pre_processing/[fmriprep|freesurfer|fsl_denoise]
 
 Log files and scripts are generated for review and troubleshooting,
 and written to:
-    <work_dir>/logs/func_pp_<timestamp>
+    <work_dir>/logs/func_preprocess_<timestamp>
 
 Notes
 -----
-- AFNI and fMRIPrep are executed from singularity images, FSL from
-    a subprocess call.
+- AFNI and fMRIPrep are executed from singularity, FSL and
+    FreeSurfer from a subprocess call.
 
 - Requires the following environmental global variables:
     -   SING_AFNI = path to AFNI singularity

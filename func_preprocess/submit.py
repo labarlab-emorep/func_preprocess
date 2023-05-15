@@ -1,4 +1,9 @@
-"""Methods for controlling sbatch and subprocess submissions."""
+"""Methods for controlling sbatch and subprocess submissions.
+
+submit_subprocess : submit or schedule bash commands via subprocess
+schedule_subj : generate and submit a python preprocessing script
+
+"""
 import sys
 import subprocess
 import textwrap
@@ -153,7 +158,7 @@ def schedule_subj(
 
         #SBATCH --job-name=p{subj[4:]}
         #SBATCH --output={log_dir}/par{subj[4:]}.txt
-        #SBATCH --time=40:00:00
+        #SBATCH --time=50:00:00
         #SBATCH --cpus-per-task=3
         #SBATCH --mem-per-cpu=4G
 

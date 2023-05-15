@@ -1,4 +1,11 @@
-"""Methods for FSL and AFNI commands."""
+"""Methods to support preprocessing.
+
+copy_clean : copy intermediates in work to group, purge work
+PullPush : down/upload relevant files from/to Keoki
+FslMethods : FSL methods for preprocessing, inherited
+AfniFslMethods : FSL and AFNI methods for preprocessing
+
+"""
 import os
 import time
 import glob

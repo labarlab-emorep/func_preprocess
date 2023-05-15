@@ -1,4 +1,8 @@
-"""Pipeline workflows for EmoRep fMRI data."""
+"""Workflow for EmoRep fMRI preprocessing.
+
+run_preproc : coordinate methods for preprocessing workflow
+
+"""
 import os
 from func_preprocess import preprocess, helper_tools
 
