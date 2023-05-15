@@ -16,7 +16,7 @@ def submit_subprocess(
 ):
     """Run bash commands as subprocesses.
 
-    Schedule a SBATCH subprocess when run_local=True, otherwise
+    Schedule a SBATCH subprocess when run_local=False, otherwise
     submit normal subprocess.
 
     Parameters
@@ -87,6 +87,7 @@ def submit_subprocess(
 
 def schedule_subj(
     subj,
+    sess_list,
     proj_raw,
     proj_deriv,
     work_deriv,
@@ -95,7 +96,6 @@ def schedule_subj(
     fs_license,
     fd_thresh,
     ignore_fmaps,
-    no_freesurfer,
     sing_afni,
     log_dir,
     run_local,
@@ -111,6 +111,8 @@ def schedule_subj(
     ----------
     subj : str
         BIDS subject identifier
+    sess_list : list
+        BIDS session identifiers
     proj_raw : path
         Location of project rawdata, e.g.
         /hpc/group/labarlab/EmoRep_BIDS/rawdata
@@ -130,8 +132,6 @@ def schedule_subj(
         Threshold for framewise displacement
     ignore_fmaps : bool
         Whether to incorporate fmaps in preprocessing
-    no_freesurfer : bool
-        Whether to use the --fs-no-reconall option
     sing_afni : path, str
         Location of afni singularity iamge
     log_dir : path
@@ -153,8 +153,9 @@ def schedule_subj(
 
         #SBATCH --job-name=p{subj[4:]}
         #SBATCH --output={log_dir}/par{subj[4:]}.txt
-        #SBATCH --time=30:00:00
-        #SBATCH --mem=4000
+        #SBATCH --time=40:00:00
+        #SBATCH --cpus-per-task=3
+        #SBATCH --mem-per-cpu=4G
 
         import os
         import sys
@@ -162,6 +163,7 @@ def schedule_subj(
 
         workflows.run_preproc(
             "{subj}",
+            {sess_list},
             "{proj_raw}",
             "{proj_deriv}",
             "{work_deriv}",
@@ -170,7 +172,6 @@ def schedule_subj(
             "{fs_license}",
             {fd_thresh},
             {ignore_fmaps},
-            {no_freesurfer},
             "{sing_afni}",
             "{log_dir}",
             {run_local},

@@ -5,6 +5,7 @@ from func_preprocess import preprocess, helper_tools
 
 def run_preproc(
     subj,
+    sess_list,
     proj_raw,
     proj_deriv,
     work_deriv,
@@ -13,7 +14,6 @@ def run_preproc(
     fs_license,
     fd_thresh,
     ignore_fmaps,
-    no_freesurfer,
     sing_afni,
     log_dir,
     run_local,
@@ -26,6 +26,8 @@ def run_preproc(
     ----------
     subj : str
         BIDS subject identifier
+    sess_list : list
+        BIDS session identifiers
     proj_raw : path
         Location of project rawdata, e.g.
         /hpc/group/labarlab/EmoRep_BIDS/rawdata
@@ -45,8 +47,6 @@ def run_preproc(
         Threshold for framewise displacement
     ignore_fmaps : bool
         Whether to incorporate fmaps in preprocessing
-    no_freesurfer : bool
-        Whether to use the --fs-no-reconall option
     sing_afni : path, str
         Location of afni singularity iamge
     log_dir : path
@@ -61,15 +61,17 @@ def run_preproc(
     Raises
     ------
     TypeError
-        Unexpected types for bool and float args
+        Unexpected types for passed args
 
     """
-    # Check types
-    for _chk_bool in [ignore_fmaps, no_freesurfer, run_local]:
+    # Check passed args
+    if not isinstance(sess_list, list):
+        raise TypeError("Expected type list for sess_list")
+    for _chk_bool in [ignore_fmaps, run_local]:
         if not isinstance(_chk_bool, bool):
             raise TypeError(
                 "Expected bool type for options : --ignore_fmaps, "
-                + "--no_freesurfer, --run_local"
+                + "--run_local"
             )
     if not isinstance(fd_thresh, float):
         raise TypeError("Expected float type for --fd_thresh")
@@ -78,31 +80,20 @@ def run_preproc(
     ):
         raise ValueError("user name and rsa key required on DCC")
 
-    # Setup software derivatives dirs, for working
-    work_fp = os.path.join(work_deriv, "fmriprep")
-    work_fs = os.path.join(work_deriv, "freesurfer")
-    work_fsl = os.path.join(work_deriv, "fsl_denoise")
-    for h_dir in [work_fp, work_fs, work_fsl]:
-        if not os.path.exists(h_dir):
-            os.makedirs(h_dir)
-
-    # Setup software derivatives dirs, for storage
-    proj_fp = os.path.join(proj_deriv, "fmriprep")
-    proj_fsl = os.path.join(proj_deriv, "fsl_denoise")
-    for h_dir in [proj_fp, proj_fsl]:
-        if not os.path.exists(h_dir):
-            os.makedirs(h_dir)
-
     # Download needed files
     if not run_local:
         sync_data = helper_tools.PullPush(
             os.path.dirname(proj_raw), log_dir, user_name, rsa_key
         )
-        sync_data.pull_rawdata(subj, "ses-day2")
-        sync_data.pull_rawdata(subj, "ses-day3")
+        for sess in sess_list:
+            sync_data.pull_rawdata(subj, sess)
 
-    # Run fMRIPrep
-    fp_dict = preprocess.fmriprep(
+    # Run FreeSurfer, fMRIPrep
+    run_fs = preprocess.RunFreeSurfer(
+        subj, proj_raw, work_deriv, log_dir, run_local
+    )
+    run_fs.recon_all(sess_list)
+    run_fp = preprocess.RunFmriprep(
         subj,
         proj_raw,
         work_deriv,
@@ -111,14 +102,15 @@ def run_preproc(
         fs_license,
         fd_thresh,
         ignore_fmaps,
-        no_freesurfer,
         log_dir,
         run_local,
     )
+    run_fp.fmriprep(sess_list)
+    fp_dict = run_fp.get_output()
 
     # Finish preprocessing with FSL, AFNI
     _ = preprocess.fsl_preproc(
-        work_fsl,
+        work_deriv,
         fp_dict,
         sing_afni,
         subj,
@@ -128,11 +120,11 @@ def run_preproc(
 
     # Clean up
     if not run_local:
-        preprocess.copy_clean(
+        helper_tools.copy_clean(
+            subj,
+            sess_list,
             proj_deriv,
             work_deriv,
-            subj,
-            no_freesurfer,
             log_dir,
         )
         sync_data.sess = "ses-all"
