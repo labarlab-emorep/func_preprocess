@@ -56,7 +56,7 @@ def copy_clean(subj, sess_list, proj_deriv, work_deriv, log_dir):
 
     for src, dst in map_dest.items():
         _, _ = submit.submit_subprocess(
-            True, f"cp -r {src} {dst} #&& rm -r {src}", "cp", log_dir
+            True, f"cp -r {src} {dst} && rm -r {src}", "cp", log_dir
         )
 
 
