@@ -1,21 +1,23 @@
 r"""Conduct preprocessing for EmoRep.
 
-Run participants through fMRIPrep preprocessing and then add
-additional steps in FSL for denoising and masking.
+Download required data from Keoki, preprocess EPI data via FreeSurfer,
+fMRIPrep, and extra FSL and AFNI steps. Generates scaled and smoothed
+EPI output. Upload files to Keoki. Sessions are treated independently
+for FreeSurfer and fMRIPrep.
 
-The pipeline workflow writes files to <work_dir>, and when finished
-purges some intermediates and saves final files to <proj_dir>.
+The workflow writes files to <work_dir>, and when finished purges
+some intermediates and saves final files to <proj_dir>.
 Specifically, final files are saved to:
     <proj-dir>/derivatives/pre_processing/[fmriprep|freesurfer|fsl_denoise]
 
 Log files and scripts are generated for review and troubleshooting,
 and written to:
-    <work_dir>/logs/func_pp_<timestamp>
+    <work_dir>/logs/func_preprocess_<timestamp>
 
 Notes
 -----
-- AFNI and fMRIPrep are executed from singularity images, FSL from
-    a subprocess call.
+- AFNI and fMRIPrep are executed from singularity, FSL and
+    FreeSurfer from a subprocess call.
 
 - Requires the following environmental global variables:
     -   SING_AFNI = path to AFNI singularity
@@ -32,19 +34,21 @@ Notes
 
 Examples
 --------
-func_preprocess -s sub-ER0009
+func_preprocess -s sub-ER0009 --rsa-key $RSA_LS2
 
 func_preprocess \
     -s sub-ER0009 sub-ER0010 \
-    --no-freesurfer \
+    --rsa-key $RSA_LS2 \
     --fd-thresh 0.2 \
     --ignore-fmaps
 
+projDir=/mnt/keoki/experiments2/EmoRep/Exp2_Compute_Emotion/data_scanner_BIDS
+workDir=${projDir}/derivatives/pre_processing
 func_preprocess \
-    -s sub-ER0009 sub-ER0016 \
     --run-local \
-    --proj-dir /path/to/local/project \
-    --work-dir /path/to/local/work
+    --proj-dir $projDir \
+    --work-dir $workDir \
+    -s sub-ER0009 sub-ER0016
 
 """
 # %%
@@ -86,16 +90,6 @@ def _get_args():
         ),
     )
     parser.add_argument(
-        "--no-freesurfer",
-        action="store_true",
-        help=textwrap.dedent(
-            """\
-            Whether to use the --fs-no-reconall option with fmriprep,
-            True if "--no--freesurfer" else False.
-            """
-        ),
-    )
-    parser.add_argument(
         "--proj-dir",
         type=str,
         default="/hpc/group/labarlab/EmoRep/Exp2_Compute_Emotion/data_scanner_BIDS",  # noqa: E501
@@ -106,6 +100,11 @@ def _get_args():
             (default : %(default)s)
             """
         ),
+    )
+    parser.add_argument(
+        "--rsa-key",
+        type=str,
+        help="Required on DCC; location of labarserv2 RSA key",
     )
     parser.add_argument(
         "--run-local",
@@ -166,9 +165,9 @@ def main():
     proj_dir = args.proj_dir
     work_deriv = args.work_dir
     ignore_fmaps = args.ignore_fmaps
-    no_freesurfer = args.no_freesurfer
     fd_thresh = args.fd_thresh
     run_local = args.run_local
+    rsa_key = args.rsa_key
 
     # Check run_local, work_deriv, and proj_dir. Set paths.
     if run_local and not work_deriv:
@@ -177,6 +176,8 @@ def main():
         raise FileNotFoundError(f"Expected to find directory : {work_deriv}")
     if not os.path.exists(proj_dir):
         raise FileNotFoundError(f"Expected to find directory : {proj_dir}")
+    if not run_local and rsa_key is None:
+        raise ValueError("RSA key required on DCC")
     proj_raw = os.path.join(proj_dir, "rawdata")
     proj_deriv = os.path.join(proj_dir, "derivatives/pre_processing")
 
@@ -204,7 +205,7 @@ def main():
     now_time = datetime.now()
     log_dir = os.path.join(
         os.path.dirname(work_deriv),
-        f"logs/func_pp_{now_time.strftime('%y-%m-%d_%H:%M')}",
+        f"logs/func_preproc_{now_time.strftime('%y%m%d_%H%M')}",
     )
     if not os.path.exists(log_dir):
         os.makedirs(log_dir)
@@ -216,8 +217,9 @@ def main():
         from func_preprocess.submit import schedule_subj as wf_obj
 
     for subj in subj_list:
-        wf_obj(
+        wf_args = [
             subj,
+            ["ses-day2", "ses-day3"],
             proj_raw,
             proj_deriv,
             work_deriv,
@@ -226,11 +228,14 @@ def main():
             fs_license,
             fd_thresh,
             ignore_fmaps,
-            no_freesurfer,
             sing_afni,
             log_dir,
             run_local,
-        )
+        ]
+        if not run_local:
+            wf_args.append(user_name)
+            wf_args.append(rsa_key)
+        wf_obj(*wf_args)
         time.sleep(3)
 
 

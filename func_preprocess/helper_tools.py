@@ -1,9 +1,182 @@
-"""Methods for FSL and AFNI commands."""
+"""Methods to support preprocessing.
+
+copy_clean : copy intermediates in work to group, purge work
+PullPush : down/upload relevant files from/to Keoki
+FslMethods : FSL methods for preprocessing, inherited
+AfniFslMethods : FSL and AFNI methods for preprocessing
+
+"""
 import os
 import time
+import glob
 import subprocess
-from typing import Union
+from typing import Union, Tuple
 from func_preprocess import submit
+
+
+def copy_clean(subj, sess_list, proj_deriv, work_deriv, log_dir):
+    """Housekeeping for data.
+
+    Delete unneeded files from work_deriv, copy remaining to
+    the proj_deriv location.
+
+    Parameters
+    ----------
+    subj : str
+        BIDS subject
+    sess_list : list
+        BIDS session identifiers
+    proj_deriv : path
+        Project derivative location, e.g.
+        /hpc/group/labarlab/EmoRep_BIDS/derivatives
+    work_deirv : path
+        Working derivative location, e.g.
+        /work/foo/EmoRep_BIDS/derivatives
+    log_dir : path
+        Location of directory to capture logs
+
+    """
+    # Setup source, destination for fsl preprocessing
+    work_fsl_subj = f"{work_deriv}/fsl_denoise/{subj}"
+    proj_fsl_subj = f"{proj_deriv}/fsl_denoise"
+    if not os.path.exists(proj_fsl_subj):
+        os.makedirs(proj_fsl_subj)
+    map_dest = {work_fsl_subj: proj_fsl_subj}
+
+    # Source, destination for fmriprep, freesurfer
+    for sess in sess_list:
+        work_fp = f"{work_deriv}/fmriprep/{sess}/{subj}/*"
+        proj_fp = f"{proj_deriv}/fmriprep/{subj}"
+        if not os.path.exists(proj_fp):
+            os.makedirs(proj_fp)
+        map_dest[work_fp] = proj_fp
+
+        work_fp_html = f"{work_deriv}/fmriprep/{sess}/{subj}.html"
+        proj_fp_html = f"{proj_deriv}/fmriprep/{subj}_{sess}.html"
+        map_dest[work_fp_html] = proj_fp_html
+
+        work_fs = os.path.join(work_deriv, "freesurfer", sess, subj)
+        proj_fs = os.path.join(proj_deriv, "freesurfer", sess)
+        if not os.path.exists(proj_fs):
+            os.makedirs(proj_fs)
+        map_dest[work_fs] = proj_fs
+
+    for src, dst in map_dest.items():
+        _, _ = submit.submit_subprocess(
+            True, f"cp -r {src} {dst} && rm -r {src}", "cp", log_dir
+        )
+
+
+class PullPush:
+    """Interact with Keoki to get and send data.
+
+    Download required files for preprocessing, send
+    final files back to Keoki.
+
+    Methods
+    -------
+    pull_rawdata(subj, sess)
+    push_derivatives()
+
+    Example
+    -------
+    sync_data = PullPush(*args)
+    sync_data.pull_rawdata("sub-ER0009", "ses-day2")
+    sync_data.sess = "ses-all"
+    sync_data.push_derivatives()
+
+    """
+
+    def __init__(
+        self,
+        proj_dir,
+        log_dir,
+        user_name,
+        rsa_key,
+        keoki_path="/mnt/keoki/experiments2/EmoRep/Exp2_Compute_Emotion/data_scanner_BIDS",  # noqa: E501
+    ):
+        """Initialize.
+
+        Parameters
+        ----------
+        proj_dir : str, os.PathLike
+            Location of project directory on group partition
+        log_dir : path
+            Output location for log files and scripts
+        user_name : str
+            User name for DCC, labarserv2
+        rsa_key : str, os.PathLike
+            Location of RSA key for labarserv2
+        keoki_path : str, os.PathLike, optional
+            Location of project directory on Keoki
+
+        """
+        print("Initializing PullPush")
+        self._dcc_proj = proj_dir
+        self._user_name = user_name
+        self._keoki_ip = "ccn-labarserv2.vm.duke.edu"
+        self._keoki_proj = f"{self._user_name}@{self._keoki_ip}:{keoki_path}"
+        self._rsa_key = rsa_key
+        self._log_dir = log_dir
+
+    def pull_rawdata(self, subj, sess):
+        """Download subject, session rawdata from Keoki.
+
+        Parameters
+        ----------
+        subj : str
+            BIDS subject identifier
+        sess : str
+            BIDS session identifier
+
+        Attributes
+        ----------
+        sess : str
+            BIDS session identifier, used to keep job logs straight
+
+        """
+        self._subj = subj
+        self.sess = sess
+
+        # Setup destination
+        dcc_raw = os.path.join(self._dcc_proj, "rawdata", subj)
+        if not os.path.exists(dcc_raw):
+            os.makedirs(dcc_raw)
+
+        # Identify source, pull data
+        print(f"\tDownloading rawdata to : {dcc_raw}")
+        keoki_raw = os.path.join(self._keoki_proj, "rawdata", subj, sess)
+        raw_out, raw_err = self._submit_rsync(keoki_raw, dcc_raw)
+
+        # Check setup
+        cnt_raw = glob.glob(f"{dcc_raw}/{sess}/**/*.nii.gz", recursive=True)
+        if not cnt_raw:
+            raise FileNotFoundError(
+                "Error in Keoki->DCC rawdata file transfer:\n\n"
+                + f"stdout:\t{raw_out}\n\nstderr:\t{raw_err}"
+            )
+
+    def push_derivatives(self):
+        """Send final derivatives to Keoki."""
+        dcc_deriv = os.path.join(self._dcc_proj, "derivatives/")
+        keoki_deriv = os.path.join(self._keoki_proj, "derivatives")
+        print(f"\tSending final data to : {keoki_deriv}")
+        _, _ = self._submit_rsync(dcc_deriv, keoki_deriv)
+
+    def _submit_rsync(self, src: str, dst: str) -> Tuple:
+        """Execute rsync between DCC and labarserv2."""
+        bash_cmd = f"""\
+            rsync \
+            -e 'ssh -i {self._rsa_key}' \
+            -rauv {src} {dst}
+        """
+        job_out, job_err = submit.submit_subprocess(
+            True,
+            bash_cmd,
+            f"{self._subj[-4:]}_{self.sess[4:]}_pullPush",
+            self._log_dir,
+        )
+        return (job_out, job_err)
 
 
 class FslMethods:
@@ -79,7 +252,7 @@ class FslMethods:
         stdout, stderr = submit.submit_subprocess(
             self._run_local,
             bash_cmd,
-            f"{self.subj[7:]}{job_name}",
+            job_name,
             self._log_dir,
             mem_gig=6,
         )
@@ -92,6 +265,21 @@ class FslMethods:
                 f"Missing {job_name} output\n{stdout}\n{stderr}"
             )
         return True
+
+    def _parse_epi(self, epi_path: Union[str, os.PathLike]) -> Tuple:
+        """Return BIDS sub, ses, task, and run values."""
+        out_list = []
+        for field in ["sub-", "ses-", "task-", "run-"]:
+            bids_value = (
+                os.path.basename(epi_path).split(field)[1].split("_")[0]
+            )
+            out_list.append(bids_value)
+        return tuple(out_list)
+
+    def _job_name(self, epi_path: Union[str, os.PathLike], name: str) -> str:
+        """Return job name, including session and run number."""
+        _, _sess, _task, _run = self._parse_epi(epi_path)
+        return f"{self.subj[-4:]}_{_sess}_{_task}_r{_run[-1]}_{name}"
 
     def tmean(
         self,
@@ -111,7 +299,9 @@ class FslMethods:
                 -Tmean \
                 {out_path}
         """
-        if self._submit_check(bash_cmd, out_path, "tmean"):
+        if self._submit_check(
+            bash_cmd, out_path, self._job_name(in_epi, "tmean")
+        ):
             return out_path
 
     def bandpass(
@@ -138,7 +328,9 @@ class FslMethods:
                 -add {in_tmean} \
                 {out_path}
         """
-        if self._submit_check(bash_cmd, out_path, "band"):
+        if self._submit_check(
+            bash_cmd, out_path, self._job_name(in_epi, "band")
+        ):
             return out_path
 
     def scale(
@@ -164,7 +356,9 @@ class FslMethods:
                 -mul {mul_value} \
                 {out_path}
         """
-        if self._submit_check(bash_cmd, out_path, "scale"):
+        if self._submit_check(
+            bash_cmd, out_path, self._job_name(in_epi, "scale")
+        ):
             return out_path
 
     def median(
@@ -289,7 +483,9 @@ class AfniFslMethods(FslMethods):
             "-expr 'a*b'",
         ]
         bash_cmd = " ".join(cp_list + self._prepend_afni() + calc_list)
-        if self._submit_check(bash_cmd, out_path, "mask"):
+        if self._submit_check(
+            bash_cmd, out_path, self._job_name(in_epi, "mask")
+        ):
             return out_path
 
     def _calc_median(self, median_txt: Union[str, os.PathLike]) -> float:
@@ -319,7 +515,10 @@ class AfniFslMethods(FslMethods):
         self._chk_path(mask_path)
 
         print("\tCalculating median voxel value")
-        out_path = os.path.join(self.out_dir, "tmp_median.txt")
+        _, _, _task, _run = self._parse_epi(in_epi)
+        out_path = os.path.join(
+            self.out_dir, f"tmp_{_task}_r{_run[-1]}_median.txt"
+        )
         work_mask = os.path.join(self.out_dir, os.path.basename(mask_path))
         cp_list = ["cp", mask_path, work_mask, ";"]
         bash_list = [
@@ -330,6 +529,33 @@ class AfniFslMethods(FslMethods):
             f"> {out_path}",
         ]
         bash_cmd = " ".join(cp_list + self._prepend_afni() + bash_list)
-        _ = self._submit_check(bash_cmd, out_path, "median")
+        _ = self._submit_check(
+            bash_cmd, out_path, self._job_name(in_epi, "median")
+        )
         med_value = self._calc_median(out_path)
         return med_value
+
+    def smooth(
+        self, in_epi: Union[str, os.PathLike], k_size: int, out_name: str
+    ):
+        """Spatially smooth EPI data."""
+        self._chk_path(in_epi)
+        if not type(k_size) == int:
+            raise TypeError("Expected type int for k_size")
+        out_path = os.path.join(self.out_dir, out_name)
+        if os.path.exists(out_path):
+            return out_path
+
+        print("\tSmoothing EPI dataset")
+        smooth_list = [
+            "3dmerge",
+            f"-1blur_fwhm {k_size}",
+            "-doall",
+            f"-prefix {out_path}",
+            in_epi,
+        ]
+        bash_cmd = " ".join(self._prepend_afni() + smooth_list)
+        if self._submit_check(
+            bash_cmd, out_path, self._job_name(in_epi, "smooth")
+        ):
+            return out_path
