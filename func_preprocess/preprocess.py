@@ -437,10 +437,10 @@ def fsl_preproc(work_deriv, fp_dict, sing_afni, subj, log_dir, run_local):
 
         # Set up filenames, check for work
         file_prefix = os.path.basename(run_epi).split("desc-")[0]
-        run_smoothed = os.path.join(
+        run_out = os.path.join(
             out_dir, f"{file_prefix}desc-smoothed_bold.nii.gz"
         )
-        if os.path.exists(run_smoothed):
+        if os.path.exists(run_out):
             return
 
         # Find mean timeseries, bandpass filter, and mask
@@ -461,7 +461,10 @@ def fsl_preproc(work_deriv, fp_dict, sing_afni, subj, log_dir, run_local):
         run_scaled = afni_fsl.scale(
             run_masked, f"{file_prefix}desc-scaled_bold.nii.gz", med_value
         )
-        _ = afni_fsl.smooth(run_scaled, 4, os.path.basename(run_smoothed))
+        run_smooth = afni_fsl.smooth(
+            run_scaled, 4, f"{file_prefix}desc-SmoothNoMask_bold.nii.gz"
+        )
+        _ = afni_fsl.mask_epi(run_smooth, run_mask, os.path.basename(run_out))
 
     mult_proc = [
         Process(

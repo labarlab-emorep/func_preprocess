@@ -23,6 +23,7 @@ def run_preproc(
     run_local,
     user_name=None,
     rsa_key=None,
+    keoki_path="/mnt/keoki/experiments2/EmoRep/Exp2_Compute_Emotion/data_scanner_BIDS",  # noqa: E501
 ):
     """Functional preprocessing pipeline for EmoRep.
 
@@ -61,6 +62,8 @@ def run_preproc(
         User name for DCC, labarserv2
     rsa_key : str, os.PathLike, optional
         Location of RSA key for labarserv2
+    keoki_path : str, os.PathLike, optional
+        Location of project directory on Keoki
 
     Raises
     ------
@@ -87,7 +90,7 @@ def run_preproc(
     # Download needed files
     if not run_local:
         sync_data = helper_tools.PullPush(
-            os.path.dirname(proj_raw), log_dir, user_name, rsa_key
+            os.path.dirname(proj_raw), log_dir, user_name, rsa_key, keoki_path
         )
         for sess in sess_list:
             sync_data.pull_rawdata(subj, sess)
