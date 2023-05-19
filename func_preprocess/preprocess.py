@@ -443,23 +443,18 @@ def fsl_preproc(work_deriv, fp_dict, sing_afni, subj, log_dir, run_local):
         if os.path.exists(run_out):
             return
 
-        # Find mean timeseries, bandpass filter, and mask
+        # Find mean timeseries and filter
         run_tmean = afni_fsl.tmean(
             run_epi, f"{file_prefix}desc-tmean_bold.nii.gz"
         )
         run_bandpass = afni_fsl.bandpass(
             run_epi, run_tmean, f"{file_prefix}desc-tfilt_bold.nii.gz"
         )
-        run_masked = afni_fsl.mask_epi(
-            run_bandpass,
-            run_mask,
-            f"{file_prefix}desc-tfiltMasked_bold.nii.gz",
-        )
 
-        # Scale timeseries and smooth
-        med_value = afni_fsl.median(run_masked, run_mask)
+        # Scale timeseries and smooth, mask
+        med_value = afni_fsl.median(run_bandpass, run_mask)
         run_scaled = afni_fsl.scale(
-            run_masked, f"{file_prefix}desc-scaled_bold.nii.gz", med_value
+            run_bandpass, f"{file_prefix}desc-scaled_bold.nii.gz", med_value
         )
         run_smooth = afni_fsl.smooth(
             run_scaled, 4, f"{file_prefix}desc-SmoothNoMask_bold.nii.gz"
