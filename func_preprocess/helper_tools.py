@@ -93,7 +93,7 @@ class PullPush:
         log_dir,
         user_name,
         rsa_key,
-        keoki_path="/mnt/keoki/experiments2/EmoRep/Exp2_Compute_Emotion/data_scanner_BIDS",  # noqa: E501
+        keoki_path,
     ):
         """Initialize.
 
@@ -107,7 +107,7 @@ class PullPush:
             User name for DCC, labarserv2
         rsa_key : str, os.PathLike
             Location of RSA key for labarserv2
-        keoki_path : str, os.PathLike, optional
+        keoki_path : str, os.PathLike
             Location of project directory on Keoki
 
         """
@@ -366,19 +366,11 @@ class FslMethods:
         in_epi: Union[str, os.PathLike],
         mask_path: Union[str, os.PathLike],
     ) -> float:
-        """Calculate median EPI voxel value.
-
-        DEPRECATED.
-
-        Notes
-        -----
-        fslstats requires a finicky interactive shell, difficult
-            to implement on DCC.
-
-        """
+        """Calculate median EPI voxel value."""
         self._chk_path(in_epi)
         self._chk_path(mask_path)
 
+        print("\tCalculating median voxel value")
         bash_cmd = f"""
             fslstats \
                 {in_epi} \
@@ -387,7 +379,16 @@ class FslMethods:
         """
         job_sp = subprocess.Popen(bash_cmd, shell=True, stdout=subprocess.PIPE)
         job_out, job_err = job_sp.communicate()
-        return float(job_out.decode("utf-8").split()[0])
+        try:
+            return float(job_out.decode("utf-8").split()[0])
+        except IndexError:
+            raise RuntimeError(
+                f"""
+            fslstats failed.
+            stdout: {job_out}
+            stderr: {job_err}
+            """
+            )
 
 
 class AfniFslMethods(FslMethods):
@@ -401,7 +402,8 @@ class AfniFslMethods(FslMethods):
     -------
     mask_epi(in_epi, mask_path, out_name)
         Multiply an EPI NIfTI with a mask
-    median(in_epi, mask_path)
+    afni_median(in_epi, mask_path)
+        Deprecated.
         Derive median voxel value from EPI file
 
     Example
@@ -480,7 +482,7 @@ class AfniFslMethods(FslMethods):
             f"-b {work_mask}",
             "-float",
             f"-prefix {out_path}",
-            "-expr 'a*b'",
+            "-expr 'a*step(b)'",
         ]
         bash_cmd = " ".join(cp_list + self._prepend_afni() + calc_list)
         if self._submit_check(
@@ -505,12 +507,16 @@ class AfniFslMethods(FslMethods):
         job_out, job_err = job_sp.communicate()
         return float(job_out.decode("utf-8").split()[0])
 
-    def median(
+    def afni_median(
         self,
         in_epi: Union[str, os.PathLike],
         mask_path: Union[str, os.PathLike],
     ) -> float:
-        """Calcualte median EPI voxel value."""
+        """Calcualte median EPI voxel value.
+
+        Deprecated.
+
+        """
         self._chk_path(in_epi)
         self._chk_path(mask_path)
 
