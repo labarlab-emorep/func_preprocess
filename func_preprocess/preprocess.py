@@ -454,10 +454,15 @@ def fsl_preproc(work_deriv, fp_dict, sing_afni, subj, log_dir, run_local):
         # Scale timeseries and smooth, mask
         med_value = afni_fsl.median(run_bandpass, run_mask)
         run_scaled = afni_fsl.scale(
-            run_bandpass, f"{file_prefix}desc-scaled_bold.nii.gz", med_value
+            run_bandpass,
+            f"{file_prefix}desc-ScaleNoMask_bold.nii.gz",
+            med_value,
         )
         run_smooth = afni_fsl.smooth(
             run_scaled, 4, f"{file_prefix}desc-SmoothNoMask_bold.nii.gz"
+        )
+        _ = afni_fsl.mask_epi(
+            run_scaled, run_mask, f"{file_prefix}desc-scaled_bold.nii.gz"
         )
         _ = afni_fsl.mask_epi(run_smooth, run_mask, os.path.basename(run_out))
 
