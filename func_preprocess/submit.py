@@ -73,7 +73,7 @@ def submit_subprocess(
             -J {job_name} \
             -t {num_hours}:00:00 \
             --cpus-per-task={num_cpus} \
-            --mem-per-cpu={mem_gig}000 \
+            --mem={mem_gig}G \
             -o {log_dir}/out_{job_name}.log \
             -e {log_dir}/err_{job_name}.log \
             --wait \
@@ -158,7 +158,7 @@ def schedule_subj(
 
         #SBATCH --job-name=p{subj[4:]}
         #SBATCH --output={log_dir}/par{subj[4:]}.txt
-        #SBATCH --time=50:00:00
+        #SBATCH --time=60:00:00
         #SBATCH --cpus-per-task=4
         #SBATCH --mem-per-cpu=6G
 

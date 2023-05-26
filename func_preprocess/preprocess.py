@@ -110,7 +110,8 @@ class RunFreeSurfer:
             f"{self._subj[-4:]}_{self._sess[4:]}_freesurfer",
             self._log_dir,
             num_hours=8,
-            num_cpus=6,
+            num_cpus=8,
+            mem_gig=16,
         )
         if not os.path.exists(out_file):
             raise FileNotFoundError(f"Expected FreeSurfer output : {out_file}")
@@ -278,7 +279,7 @@ class RunFmriprep:
             bash_fmriprep,
             f"{self._subj[-4:]}_{self._sess[4:]}_fmriprep",
             self._log_dir,
-            mem_gig=12,
+            mem_gig=24,
             num_cpus=10,
             num_hours=40,
         )
