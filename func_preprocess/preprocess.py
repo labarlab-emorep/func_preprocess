@@ -110,7 +110,8 @@ class RunFreeSurfer:
             f"{self._subj[-4:]}_{self._sess[4:]}_freesurfer",
             self._log_dir,
             num_hours=8,
-            num_cpus=6,
+            num_cpus=8,
+            mem_gig=16,
         )
         if not os.path.exists(out_file):
             raise FileNotFoundError(f"Expected FreeSurfer output : {out_file}")
@@ -278,7 +279,7 @@ class RunFmriprep:
             bash_fmriprep,
             f"{self._subj[-4:]}_{self._sess[4:]}_fmriprep",
             self._log_dir,
-            mem_gig=12,
+            mem_gig=24,
             num_cpus=10,
             num_hours=40,
         )
@@ -421,7 +422,7 @@ def fsl_preproc(work_deriv, fp_dict, sing_afni, subj, log_dir, run_local):
         if _key not in fp_dict.keys():
             raise KeyError(f"Expected key in fp_dict : {_key}")
 
-    # Mutliprocess extra preprocessing steps across runs
+    # Set up for extra preprocessing
     work_fsl = os.path.join(work_deriv, "fsl_denoise")
     afni_fsl = helper_tools.AfniFslMethods(log_dir, run_local, sing_afni)
 
@@ -466,22 +467,31 @@ def fsl_preproc(work_deriv, fp_dict, sing_afni, subj, log_dir, run_local):
         )
         _ = afni_fsl.mask_epi(run_smooth, run_mask, os.path.basename(run_out))
 
-    mult_proc = [
-        Process(
-            target=_preproc,
-            args=(
-                run_epi,
-                run_mask,
-            ),
-        )
+    # Multiprocess locally, serially on DCC to avoid oom-kill events
+    # (cgroup out-of-memory handler) which arise when processing >4
+    # participants at once due to number of runs.
+    if run_local:
+        mult_proc = [
+            Process(
+                target=_preproc,
+                args=(
+                    run_epi,
+                    run_mask,
+                ),
+            )
+            for run_epi, run_mask in zip(
+                fp_dict["preproc_bold"], fp_dict["mask_bold"]
+            )
+        ]
+        for proc in mult_proc:
+            proc.start()
+        for proc in mult_proc:
+            proc.join()
+    else:
         for run_epi, run_mask in zip(
             fp_dict["preproc_bold"], fp_dict["mask_bold"]
-        )
-    ]
-    for proc in mult_proc:
-        proc.start()
-    for proc in mult_proc:
-        proc.join()
+        ):
+            _preproc(run_epi, run_mask)
 
     # Check for expected number of files
     scaled_files = glob.glob(
