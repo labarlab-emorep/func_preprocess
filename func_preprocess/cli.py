@@ -38,6 +38,7 @@ func_preprocess -s sub-ER0009 --rsa-key $RSA_LS2
 
 func_preprocess \
     -s sub-ER0009 sub-ER0010 \
+    --ses-list ses-day2 \
     --rsa-key $RSA_LS2 \
     --fd-thresh 0.2 \
     --ignore-fmaps
@@ -69,16 +70,6 @@ def _get_args():
         description=ver_info + __doc__, formatter_class=RawTextHelpFormatter
     )
     parser.add_argument(
-        "--ignore-fmaps",
-        action="store_true",
-        help=textwrap.dedent(
-            """\
-            Whether fmriprep will ignore fmaps,
-            True if "--ignore-fmaps" else False.
-            """
-        ),
-    )
-    parser.add_argument(
         "--fd-thresh",
         type=float,
         default=0.5,
@@ -86,6 +77,16 @@ def _get_args():
             """\
             Framewise displacement threshold
             (default : %(default)s)
+            """
+        ),
+    )
+    parser.add_argument(
+        "--ignore-fmaps",
+        action="store_true",
+        help=textwrap.dedent(
+            """\
+            Whether fmriprep will ignore fmaps,
+            True if "--ignore-fmaps" else False.
             """
         ),
     )
@@ -118,6 +119,18 @@ def _get_args():
         ),
     )
     parser.add_argument(
+        "--ses-list",
+        nargs="+",
+        default=["ses-day2", "ses-day3"],
+        help=textwrap.dedent(
+            """\
+            List of session IDs to submit for pre-processing
+            (default : %(default)s)
+            """
+        ),
+        type=str,
+    )
+    parser.add_argument(
         "--work-dir",
         type=str,
         default=None,
@@ -140,8 +153,7 @@ def _get_args():
         nargs="+",
         help=textwrap.dedent(
             """\
-            List of subject IDs to submit for pre-processing,
-            e.g. "-s sub-ER4414" or "--sub-list sub-ER4414 sub-ER4415"
+            List of subject IDs to submit for pre-processing
             """
         ),
         type=str,
@@ -168,6 +180,7 @@ def main():
     fd_thresh = args.fd_thresh
     run_local = args.run_local
     rsa_key = args.rsa_key
+    ses_list = args.ses_list
 
     # Check run_local, work_deriv, and proj_dir. Set paths.
     if run_local and not work_deriv:
@@ -219,7 +232,7 @@ def main():
     for subj in subj_list:
         wf_args = [
             subj,
-            ["ses-day2", "ses-day3"],
+            ses_list,
             proj_raw,
             proj_deriv,
             work_deriv,
