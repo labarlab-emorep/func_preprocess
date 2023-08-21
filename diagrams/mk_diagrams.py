@@ -2,7 +2,6 @@
 from diagrams import Cluster, Diagram, Edge
 
 # %%
-from diagrams.aws.analytics import DataPipeline
 from diagrams.aws.compute import Batch, Compute
 from diagrams.aws.database import Database
 from diagrams.aws.devtools import CommandLineInterface
@@ -31,7 +30,7 @@ graph_attr = {
     "compound": "true",
     }
 
-with Diagram("process", graph_attr=graph_attr):
+with Diagram("process", graph_attr=graph_attr, show=False):
     cli = CommandLineInterface("cli")
     sb = Batch("schedule wf")
 
