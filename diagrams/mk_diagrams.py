@@ -2,6 +2,7 @@
 from diagrams import Cluster, Diagram, Edge
 
 # %%
+from diagrams.aws.analytics import DataPipeline
 from diagrams.aws.compute import Batch, Compute
 from diagrams.aws.database import Database
 from diagrams.aws.devtools import CommandLineInterface
@@ -28,25 +29,39 @@ with Diagram("imports", direction="TB", show=False):
 graph_attr = {
     "layout": "dot",
     "compound": "true",
-    }
+}
 
-with Diagram("process", graph_attr=graph_attr, show=False):
+with Diagram("process", graph_attr=graph_attr, show=True):
     cli = CommandLineInterface("cli")
-    sb = Batch("schedule wf")
+    with Cluster("submit"):
+        sb = Batch("schedule_subj")
+    with Cluster("sbatch_parent"):
+        wf = Compute("workflows")
+        with Cluster("run_preproc"):
+            dl = Database("pull_rawdata")
+            with Cluster("preprocess"):
+                fs = Batch("RunFreeSurfer")
+                fp = Batch("RunFmriprep")
+                fl = Compute("fsl_preproc")
+                with Cluster("helper_tools"):
+                    ht = Batch("AfniFslMethods")
+            ul = Database("push_derivatives")
+    with Cluster("sbatch_child"):
+        fschild = Compute("recon_all")
+        fpchild = Compute("fmriprep")
+        fslchild = DataPipeline("tmean-->scale")
 
-    with Cluster("sbatch"):
-        wf = Compute("parent wf")
+    cli >> sb >> Edge(lhead="cluster_sbatch_parent") >> wf
+    wf >> Edge(lhead="cluster_run_preproc") >> dl
+    dl >> Edge(lhead="cluster_preprocess") >> fs
+    fl >> Edge(lhead="cluster_helper_tools") >> ht
+    fs >> fp >> fl
+    ht >> Edge(ltail="cluster_preprocess") >> ul
 
-        with Cluster("child_pipe"):
-            dl = Database("Download")
-            fs = Compute("FreeSurfer")
-            fp = Compute("fMRIPrep")
-            fl = Compute("FSL preproc")
-            ul = Database("Upload")
+    #
+    fs >> fschild
+    fp >> fpchild
+    ht >> fslchild
 
-    cli >> sb >> Edge(lhead='cluster_sbatch') >> wf
-    # wf >> dl
-    wf >> Edge(lhead='cluster_child_pipe') >> dl
-    dl >> fs >> fp >> fl >> ul
 
 # %%
