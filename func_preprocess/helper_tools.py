@@ -157,11 +157,36 @@ class PullPush:
             )
 
     def push_derivatives(self):
-        """Send final derivatives to Keoki."""
-        dcc_deriv = os.path.join(self._dcc_proj, "derivatives/")
-        keoki_deriv = os.path.join(self._keoki_proj, "derivatives")
-        print(f"\tSending final data to : {keoki_deriv}")
-        _, _ = self._submit_rsync(dcc_deriv, keoki_deriv)
+        """Send final derivatives to Keoki and clean DCC."""
+        for step in ["fmriprep", "freesurfer", "fsl_denoise"]:
+            self._dcc_step = os.path.join(
+                self._dcc_proj, "derivatives", "pre_processing", step
+            )
+            self._keoki_step = os.path.join(
+                self._keoki_proj, "derivatives", "pre_processing", step
+            )
+            push_meth = getattr(self, f"_push_{step}")
+            push_meth()
+
+    def _push_fmriprep(self):
+        """Send fMRIPrep to Keoki."""
+        src_fp = os.path.join(self._dcc_step, f"{self._subj}*")
+        _, _ = self._submit_rsync(src_fp, self._keoki_step)
+        self._submit_rm(src_fp)
+
+    def _push_freesurfer(self):
+        """Send freesurfer to Keoki."""
+        for day in ["ses-day2", "ses-day3"]:
+            src_fs = os.path.join(self._dcc_step, day, self._subj)
+            dst_fs = os.path.join(self._keoki_step, day)
+            _, _ = self._submit_rsync(src_fs, dst_fs)
+            self._submit_rm(src_fs)
+
+    def _push_fsl_denoise(self):
+        """Send FSL preproc to Keoki."""
+        src_fsl = os.path.join(self._dcc_step, self._subj)
+        _, _ = self._submit_rsync(src_fsl, self._keoki_step)
+        self._submit_rm(src_fsl)
 
     def _submit_rsync(self, src: str, dst: str) -> Tuple:
         """Execute rsync between DCC and labarserv2."""
@@ -177,6 +202,12 @@ class PullPush:
             self._log_dir,
         )
         return (job_out, job_err)
+
+    def _submit_rm(self, rm_path: Union[str, os.PathLike]):
+        """Remove file tree."""
+        _, _ = submit.submit_subprocess(
+            True, f"rm -r {rm_path}", "rm", self._log_dir
+        )
 
 
 class FslMethods:
