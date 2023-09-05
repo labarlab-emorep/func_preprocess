@@ -137,6 +137,5 @@ def run_preproc(
         work_deriv,
         log_dir,
     )
-    sync_data.sess = "ses-all"
-    sync_data.push_derivatives()
+    sync_data.push_derivatives(sess_list)
     shutil.rmtree(os.path.join(proj_raw, subj))

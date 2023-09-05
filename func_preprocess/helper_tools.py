@@ -73,17 +73,35 @@ class PullPush:
     Download required files for preprocessing, send
     final files back to Keoki.
 
+    Parameters
+    ----------
+    proj_dir : str, os.PathLike
+        Location of project directory on group partition
+    log_dir : path
+        Output location for log files and scripts
+    user_name : str
+        User name for DCC, labarserv2
+    rsa_key : str, os.PathLike
+        Location of RSA key for labarserv2
+    keoki_path : str, os.PathLike
+        Location of project directory on Keoki
+
     Methods
     -------
     pull_rawdata(subj, sess)
-    push_derivatives()
+        Download rawdata from Keoki
+    push_derivatives(sess_list)
+        Upload preprocessed files to Keoki
 
     Example
     -------
     sync_data = PullPush(*args)
     sync_data.pull_rawdata("sub-ER0009", "ses-day2")
-    sync_data.sess = "ses-all"
-    sync_data.push_derivatives()
+    sync_data.push_derivatives(["ses-day2", "ses-day3"])
+
+    Notes
+    -----
+    push_derivatives is required to run after pull_rawdata
 
     """
 
@@ -95,22 +113,7 @@ class PullPush:
         rsa_key,
         keoki_path,
     ):
-        """Initialize.
-
-        Parameters
-        ----------
-        proj_dir : str, os.PathLike
-            Location of project directory on group partition
-        log_dir : path
-            Output location for log files and scripts
-        user_name : str
-            User name for DCC, labarserv2
-        rsa_key : str, os.PathLike
-            Location of RSA key for labarserv2
-        keoki_path : str, os.PathLike
-            Location of project directory on Keoki
-
-        """
+        """Initialize."""
         print("Initializing PullPush")
         self._dcc_proj = proj_dir
         self._user_name = user_name
@@ -129,14 +132,9 @@ class PullPush:
         sess : str
             BIDS session identifier
 
-        Attributes
-        ----------
-        sess : str
-            BIDS session identifier, used to keep job logs straight
-
         """
         self._subj = subj
-        self.sess = sess
+        self._sess = sess
 
         # Setup destination
         dcc_raw = os.path.join(self._dcc_proj, "rawdata", subj)
@@ -156,8 +154,16 @@ class PullPush:
                 + f"stdout:\t{raw_out}\n\nstderr:\t{raw_err}"
             )
 
-    def push_derivatives(self):
-        """Send final derivatives to Keoki and clean DCC."""
+    def push_derivatives(self, sess_list):
+        """Send final derivatives to Keoki and clean DCC.
+
+        Parameters
+        ----------
+        sess_list : list
+            List of BIDS session identifier
+
+        """
+        self._sess_list = sess_list
         for step in ["fmriprep", "freesurfer", "fsl_denoise"]:
             self._dcc_step = os.path.join(
                 self._dcc_proj, "derivatives", "pre_processing", step
@@ -170,20 +176,23 @@ class PullPush:
 
     def _push_fmriprep(self):
         """Send fMRIPrep to Keoki."""
+        print(f"\tUploading fMRIPrep for : {self._subj}")
         src_fp = os.path.join(self._dcc_step, f"{self._subj}*")
         _, _ = self._submit_rsync(src_fp, self._keoki_step)
         self._submit_rm(src_fp)
 
     def _push_freesurfer(self):
         """Send freesurfer to Keoki."""
-        for day in ["ses-day2", "ses-day3"]:
-            src_fs = os.path.join(self._dcc_step, day, self._subj)
-            dst_fs = os.path.join(self._keoki_step, day)
+        for self._sess in self._sess_list:
+            print(f"\tUploading FreeSurfer for : {self._subj}, {self._sess}")
+            src_fs = os.path.join(self._dcc_step, self._sess, self._subj)
+            dst_fs = os.path.join(self._keoki_step, self._sess)
             _, _ = self._submit_rsync(src_fs, dst_fs)
             self._submit_rm(src_fs)
 
     def _push_fsl_denoise(self):
         """Send FSL preproc to Keoki."""
+        print(f"\tUploading FSL preproc for : {self._subj}")
         src_fsl = os.path.join(self._dcc_step, self._subj)
         _, _ = self._submit_rsync(src_fsl, self._keoki_step)
         self._submit_rm(src_fsl)
@@ -198,7 +207,7 @@ class PullPush:
         job_out, job_err = submit.submit_subprocess(
             True,
             bash_cmd,
-            f"{self._subj[-4:]}_{self.sess[4:]}_pullPush",
+            f"{self._subj[-4:]}_{self._sess[4:]}_pullPush",
             self._log_dir,
         )
         return (job_out, job_err)
