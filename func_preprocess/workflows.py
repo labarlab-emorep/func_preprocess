@@ -4,6 +4,7 @@ run_preproc : coordinate methods for preprocessing workflow
 
 """
 import os
+import shutil
 from func_preprocess import preprocess, helper_tools
 
 
@@ -125,14 +126,16 @@ def run_preproc(
         run_local,
     )
 
-    # Clean up
-    if not run_local:
-        helper_tools.copy_clean(
-            subj,
-            sess_list,
-            proj_deriv,
-            work_deriv,
-            log_dir,
-        )
-        sync_data.sess = "ses-all"
-        sync_data.push_derivatives()
+    # Clean up only dcc
+    if run_local:
+        return
+
+    helper_tools.copy_clean(
+        subj,
+        sess_list,
+        proj_deriv,
+        work_deriv,
+        log_dir,
+    )
+    sync_data.push_derivatives(sess_list)
+    shutil.rmtree(os.path.join(proj_raw, subj))
