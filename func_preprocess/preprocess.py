@@ -85,14 +85,14 @@ class RunFreeSurfer:
             self._work_fs, self._subj, "mri/aparc+aseg.mgz"
         )
         if os.path.exists(out_file):
-            return
+            return out_file
 
         # Check for required sess anat
         if not os.path.exists(
             os.path.join(self._proj_raw, self._subj, self._sess)
         ):
             print(f"Session rawdata not found for {self._subj} : {self._sess}")
-            return
+            return out_file
 
         # Construct recon-all command, execute
         self._setup()
