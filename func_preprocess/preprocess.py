@@ -129,8 +129,9 @@ class RunFreeSurfer:
             self._subj,
         )
         subj_fs = os.path.join(self._work_fs, self._subj, "mri/orig")
-        if os.path.exists(os.path.join(subj_fs, "001.mgz")):
-            return
+        mgz_path = os.path.join(subj_fs, "001.mgz")
+        if os.path.exists(mgz_path):
+            return mgz_path
         for h_dir in [proj_subj, subj_fs]:
             os.makedirs(h_dir, exist_ok=True)
 
