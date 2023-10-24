@@ -145,7 +145,7 @@ class RunFreeSurfer:
         )
         if not os.path.exists(subj_t1):
             raise FileNotFoundError(
-                f"Missing rawdata T1w for : {self._subj}, {self._sess}"
+                f"Missing rawdata T1w for: {self._subj}, {self._sess}"
             )
 
         # Convert anat nifti to mgz
@@ -257,7 +257,7 @@ class RunFmriprep:
         self._work_fp = os.path.join(self._work_deriv, "fmriprep", self._sess)
         check_file = os.path.join(self._work_fp, f"{self._subj}.html")
         if os.path.exists(check_file):
-            return
+            return check_file
 
         # Check and setup
         self._work_fs = os.path.join(
