@@ -157,7 +157,7 @@ Generally, the steps to the pre-processing workflow are:
 
 Also, see [Diagrams](#diagrams).
 
-The first and last steps are omitted if run locally (but FreeSurfer and fMRIPrep have not be recently tested on labarserv2).
+The first and last steps are omitted if run locally (but FreeSurfer and fMRIPrep have not been recently tested on labarserv2).
 
 ## Notes
 - Data are downloaded from Keoki to `/hpc/group/labarlab/EmoRep`
