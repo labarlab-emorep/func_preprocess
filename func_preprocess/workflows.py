@@ -3,6 +3,7 @@
 run_preproc : coordinate methods for preprocessing workflow
 
 """
+
 import os
 import shutil
 from func_preprocess import preprocess, helper_tools
@@ -94,7 +95,7 @@ def run_preproc(
             os.path.dirname(proj_raw), log_dir, user_name, rsa_key, keoki_path
         )
         for sess in sess_list:
-            sync_data.pull_rawdata(subj, sess)
+            _ = sync_data.pull_rawdata(subj, sess)
 
     # Run FreeSurfer, fMRIPrep
     run_fs = preprocess.RunFreeSurfer(

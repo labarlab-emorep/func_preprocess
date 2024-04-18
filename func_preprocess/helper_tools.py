@@ -6,6 +6,7 @@ FslMethods : FSL methods for preprocessing, inherited
 AfniFslMethods : FSL and AFNI methods for preprocessing
 
 """
+
 import os
 import time
 import glob
@@ -96,7 +97,7 @@ class PullPush:
     Example
     -------
     sync_data = PullPush(*args)
-    sync_data.pull_rawdata("sub-ER0009", "ses-day2")
+    nii_list = sync_data.pull_rawdata("sub-ER0009", "ses-day2")
     sync_data.push_derivatives(["ses-day2", "ses-day3"])
 
     Notes
@@ -132,6 +133,11 @@ class PullPush:
         sess : str
             BIDS session identifier
 
+        Returns
+        -------
+        list
+            Locations of downloaded NIfTI files
+
         """
         self._subj = subj
         self._sess = sess
@@ -147,12 +153,15 @@ class PullPush:
         raw_out, raw_err = self._submit_rsync(keoki_raw, dcc_raw)
 
         # Check setup
-        cnt_raw = glob.glob(f"{dcc_raw}/{sess}/**/*.nii.gz", recursive=True)
-        if not cnt_raw:
+        raw_niis = sorted(
+            glob.glob(f"{dcc_raw}/{sess}/**/*.nii.gz", recursive=True)
+        )
+        if not raw_niis:
             raise FileNotFoundError(
                 "Error in Keoki->DCC rawdata file transfer:\n\n"
                 + f"stdout:\t{raw_out}\n\nstderr:\t{raw_err}"
             )
+        return raw_niis
 
     def push_derivatives(self, sess_list):
         """Send final derivatives to Keoki and clean DCC.
@@ -586,7 +595,7 @@ class AfniFslMethods(FslMethods):
     ):
         """Spatially smooth EPI data."""
         self._chk_path(in_epi)
-        if not type(k_size) == int:
+        if not type(k_size) == int:  # noqa : E721
             raise TypeError("Expected type int for k_size")
         out_path = os.path.join(self.out_dir, out_name)
         if os.path.exists(out_path):

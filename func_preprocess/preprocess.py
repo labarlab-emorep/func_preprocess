@@ -5,6 +5,7 @@ RunFmriprep : run fmriprep for each session
 fsl_preproc : conduct extra preprocessing steps
 
 """
+
 import os
 import glob
 import json
@@ -17,6 +18,17 @@ class RunFreeSurfer:
     """Run FreeSurfer's recon-all for a specific subject.
 
     FreeSurfer SUBJECTS_DIR is organized by session.
+
+    Parameters
+    ----------
+    subj : str
+        BIDS subject
+    proj_raw : str, os.PathLike
+        Location of project rawdata directory
+    work_deriv : str, os.PathLike
+        Output location for pipeline intermediates
+    log_dir : str, os.PathLike
+        Location for capturing stdout/err
 
     Methods
     -------
@@ -31,20 +43,7 @@ class RunFreeSurfer:
     """
 
     def __init__(self, subj, proj_raw, work_deriv, log_dir, run_local):
-        """Initialize.
-
-        Parameters
-        ----------
-        subj : str
-            BIDS subject
-        proj_raw : str, os.PathLike
-            Location of project rawdata directory
-        work_deriv : str, os.PathLike
-            Output location for pipeline intermediates
-        log_dir : str, os.PathLike
-            Location for capturing stdout/err
-
-        """
+        """Initialize."""
         print("Initializing RunFreeSurfer")
         self._subj = subj
         self._proj_raw = proj_raw
@@ -52,15 +51,8 @@ class RunFreeSurfer:
         self._log_dir = log_dir
         self._run_local = run_local
 
-    def recon_all(self, sess_list):
-        """Spawn a freesurfer recon-all command for each session.
-
-        Parameters
-        ----------
-        sess_list : list
-            Session identifiers
-
-        """
+    def recon_all(self, sess_list: list):
+        """Spawn a freesurfer recon-all command for each session."""
         mult_proc = [
             Process(
                 target=self._exec_fs,
@@ -160,6 +152,30 @@ class RunFreeSurfer:
 class RunFmriprep:
     """Run fMRIPrep for a specific subject.
 
+    Parameters
+    ----------
+    subj : str
+        BIDS subject
+    proj_raw : path
+        Location of project rawdata directory
+    work_deriv : path
+        Output location for pipeline intermediates, e.g.
+        /work/foo/project/derivatives
+    sing_fmriprep : path, str
+        Location and image of fmriprep singularity file
+    tplflow_dir : path, str
+        Clone location of templateflow
+    fs_license : path, str
+        Location of FreeSurfer license
+    fd_thresh : float
+        Threshold for framewise displacement
+    ignore_fmaps : bool
+        Whether to incorporate fmaps in preprocessing
+    log_dir : path
+        Location of directory to capture logs
+    run_local : bool
+        Whether job, subprocesses are run locally
+
     Methods
     -------
     fmriprep(sess_list)
@@ -188,33 +204,7 @@ class RunFmriprep:
         log_dir,
         run_local,
     ):
-        """Initialize.
-
-        Parameters
-        ----------
-        subj : str
-            BIDS subject
-        proj_raw : path
-            Location of project rawdata directory
-        work_deriv : path
-            Output location for pipeline intermediates, e.g.
-            /work/foo/project/derivatives
-        sing_fmriprep : path, str
-            Location and image of fmriprep singularity file
-        tplflow_dir : path, str
-            Clone location of templateflow
-        fs_license : path, str
-            Location of FreeSurfer license
-        fd_thresh : float
-            Threshold for framewise displacement
-        ignore_fmaps : bool
-            Whether to incorporate fmaps in preprocessing
-        log_dir : path
-            Location of directory to capture logs
-        run_local : bool
-            Whether job, subprocesses are run locally
-
-        """
+        """Initialize."""
         print("Initializing RunFmriprep")
         self._subj = subj
         self._proj_raw = proj_raw
@@ -228,15 +218,8 @@ class RunFmriprep:
         self._log_dir = log_dir
         self._run_local = run_local
 
-    def fmriprep(self, sess_list):
-        """Spawn an fMRIPrep job for each session.
-
-        Parameters
-        ----------
-        sess_list : list
-            Session identifiers
-
-        """
+    def fmriprep(self, sess_list: list):
+        """Spawn an fMRIPrep job for each session."""
         mult_proc = [
             Process(
                 target=self._exec_fp,
@@ -249,7 +232,7 @@ class RunFmriprep:
         for proc in mult_proc:
             proc.join()
 
-    def _exec_fp(self, sess):
+    def _exec_fp(self, sess: str):
         """Setup for, write, and execute fmriprep."""
         # Avoid repeating work
         self._sess = sess
@@ -350,7 +333,7 @@ class RunFmriprep:
             bash_list.append("--ignore fieldmaps")
         return " ".join(bash_list)
 
-    def get_output(self):
+    def get_output(self) -> dict:
         """Return dictionary of files for extra preprocessing."""
 
         # Make list of needed files for FSL denoising
