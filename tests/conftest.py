@@ -184,7 +184,7 @@ def fixt_afni_fsl(fixt_setup, fixt_fmriprep):
     )
     if not os.path.exists(out_dir):
         os.makedirs(out_dir)
-    afni_fsl = helper_tools.AfniFslMethods(
+    afni_fsl = helper_tools.ExtraPreproc(
         fixt_setup.log_dir, False, os.environ["SING_AFNI"]
     )
     afni_fsl.set_subj(fixt_setup.subj, out_dir)
@@ -192,28 +192,17 @@ def fixt_afni_fsl(fixt_setup, fixt_fmriprep):
     # Prep paths, prefix
     run_epi = fixt_fmriprep.small_fp_dict["preproc_bold"][0]
     run_mask = fixt_fmriprep.small_fp_dict["mask_bold"][0]
-    file_prefix = os.path.basename(run_epi).split("desc-")[0]
 
     # Use methods
-    run_tmean = afni_fsl.tmean(run_epi, f"{file_prefix}desc-tmean_bold.nii.gz")
-    run_bandpass = afni_fsl.bandpass(
-        run_epi, run_tmean, f"{file_prefix}desc-tfilt_bold.nii.gz"
-    )
+    run_tmean = afni_fsl.tmean(run_epi)
+    run_bandpass = afni_fsl.bandpass(run_epi, run_tmean)
     med_value = afni_fsl.median(run_bandpass, run_mask)
     run_scaled = afni_fsl.scale(
-        run_bandpass,
-        f"{file_prefix}desc-ScaleNoMask_bold.nii.gz",
-        med_value,
+        run_bandpass, med_value, desc="desc-ScaleNoMask"
     )
-    run_smooth = afni_fsl.smooth(
-        run_scaled, 4, f"{file_prefix}desc-SmoothNoMask_bold.nii.gz"
-    )
-    out_scaled = afni_fsl.mask_epi(
-        run_scaled, run_mask, f"{file_prefix}desc-scaled_bold.nii.gz"
-    )
-    out_smooth = afni_fsl.mask_epi(
-        run_smooth, run_mask, f"{file_prefix}desc-smoothed_bold.nii.gz"
-    )
+    run_smooth = afni_fsl.smooth(run_scaled, 4, desc="desc-SmoothNoMask")
+    out_scaled = afni_fsl.mask_epi(run_scaled, run_mask, desc="desc-scaled")
+    out_smooth = afni_fsl.mask_epi(run_smooth, run_mask, desc="desc-smoothed")
 
     # Build and yield obj
     help_afni_fsl = UnitTestVars()

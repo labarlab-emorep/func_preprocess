@@ -77,13 +77,17 @@ def test_FslMethods_submit_check(fixt_setup, fixt_afni_fsl):
 
 
 def test_FslMethods_parse_epi(fixt_setup, fixt_afni_fsl):
-    subj, sess, task, run = fixt_afni_fsl.afni_fsl._parse_epi(
-        fixt_afni_fsl.out_scaled
+    subj, sess, task, run, space, res, desc, suff = (
+        fixt_afni_fsl.afni_fsl._parse_epi(fixt_afni_fsl.out_scaled)
     )
-    assert subj == fixt_setup.subj.split("-")[1]
-    assert sess == fixt_setup.sess.split("-")[1]
-    assert "rest" == task
-    assert "01" == run
+    assert subj == fixt_setup.subj
+    assert sess == fixt_setup.sess
+    assert "task-rest" == task
+    assert "run-01" == run
+    assert "space-MNI152NLin6Asym" == space
+    assert "res-2" == res
+    assert "desc-scaled" == desc
+    assert "bold.nii.gz" == suff
 
 
 def test_FslMethods_job_name(fixt_setup, fixt_afni_fsl):
@@ -92,7 +96,7 @@ def test_FslMethods_job_name(fixt_setup, fixt_afni_fsl):
     )
     assert (
         f"{fixt_setup.subj[-4:]}_{fixt_setup.sess.split('-')[-1]}"
-        + "_rest_r1_foo"
+        + "_r_r1_foo"
         == job_name
     )
 
