@@ -47,3 +47,4 @@ def check_test_env():
     os.environ["SING_FMRIPREP"]
     os.environ["SINGULARITYENV_TEMPLATEFLOW_HOME"]
     os.environ["FS_LICENSE"]
+    os.environ["SING_AFNI"]

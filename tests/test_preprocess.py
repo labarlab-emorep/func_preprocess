@@ -114,5 +114,22 @@ def test_RunFmriprep_get_output_mask_filename(fixt_setup, fixt_fmriprep):
 
 
 @pytest.mark.preproc
-def test_fsl_preproc():
-    pass
+def test_fsl_preproc_paths_names(fixt_setup, fixt_fsl_preproc):
+    # Check output path
+    file_path, file_name = fixt_fsl_preproc.scaled_list[0].split("func/")
+    file_org = file_path.split("tests/work/")[1]
+    deriv, subj, sess, _ = file_org.split("/")
+    assert "fsl_denoise" == deriv
+    assert subj == fixt_setup.subj
+    assert sess == fixt_setup.sess
+
+    # Check file name
+    subj, sess, task, run, space, res, desc, suff = file_name.split("_")
+    assert subj == fixt_setup.subj
+    assert sess == fixt_setup.sess
+    assert "task-rest" == task
+    assert "run-01" == run
+    assert "space-MNI152NLin6Asym" == space
+    assert "res-2" == res
+    assert "desc-scaled" == desc
+    assert "bold.nii.gz" == suff
