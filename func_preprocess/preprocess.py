@@ -87,7 +87,7 @@ class RunFreeSurfer:
             return
 
         # Construct recon-all command, execute
-        self._setup()
+        _ = self._setup()
         bash_list = [
             "recon-all",
             f"-subjid {self._subj}",
@@ -108,7 +108,7 @@ class RunFreeSurfer:
         if not os.path.exists(out_file):
             raise FileNotFoundError(f"Expected FreeSurfer output : {out_file}")
 
-    def _setup(self):
+    def _setup(self) -> Union[str, os.PathLike]:
         """Setup freesurfer subject's directory, make 001.mgz."""
 
         # Setup directory structures
@@ -120,11 +120,13 @@ class RunFreeSurfer:
             self._sess,
             self._subj,
         )
-        subj_fs = os.path.join(self._work_fs, self._subj, "mri/orig")
-        if os.path.exists(os.path.join(subj_fs, "001.mgz")):
-            return
-        for h_dir in [proj_subj, subj_fs]:
-            os.makedirs(h_dir, exist_ok=True)
+        out_dir = os.path.join(self._work_fs, self._subj, "mri/orig")
+        out_path = os.path.join(out_dir, "001.mgz")
+        if os.path.exists(out_path):
+            return out_path
+        for h_dir in [proj_subj, out_dir]:
+            if not os.path.exists(h_dir):
+                os.makedirs(h_dir)
 
         # Get rawdata T1w
         subj_t1 = os.path.join(
@@ -140,13 +142,18 @@ class RunFreeSurfer:
             )
 
         # Convert anat nifti to mgz
-        bash_cmd = f"mri_convert {subj_t1} {subj_fs}/001.mgz"
+        bash_cmd = f"mri_convert {subj_t1} {out_path}"
         _, _ = submit.submit_subprocess(
             True,
             bash_cmd,
             f"{self._subj[-4:]}_{self._sess[4:]}_conv",
             self._log_dir,
         )
+        if not os.path.exists(out_path):
+            raise FileNotFoundError(
+                f"Expected mri_convert output : {out_path}"
+            )
+        return out_path
 
 
 class RunFmriprep:

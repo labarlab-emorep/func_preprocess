@@ -69,8 +69,34 @@ def pytest_sessionfinish(session, exitstatus):
 
 
 @pytest.fixture(scope="session")
-def fixt_preproc(fixt_setup):
-    """Run preproc methods and yield vars."""
+def fixt_freesurfer(fixt_setup):
+    """Run freesurfer methods and yield vars."""
+    # Start fs instance
+    run_fs = preprocess.RunFreeSurfer(
+        fixt_setup.subj,
+        fixt_setup.group_raw,
+        fixt_setup.work_dir,
+        fixt_setup.log_dir,
+        False,
+    )
+
+    # Set needed private attrs (run_fs._exec_fs), run setup
+    run_fs._sess = fixt_setup.sess
+    run_fs._work_fs = os.path.join(
+        fixt_setup.work_dir, "freesurfer", fixt_setup.sess
+    )
+    mgz_path = run_fs._setup()
+
+    # Build and yield obj
+    fs_help = UnitTestVars()
+    fs_help.run_fs = run_fs
+    fs_help.mgz_path = mgz_path
+    yield fs_help
+
+
+@pytest.fixture(scope="session")
+def fixt_fmriprep(fixt_setup):
+    """Run fmriprep methods and yield vars."""
     # Download fmriprep output
     dst_fp = os.path.join(
         fixt_setup.work_dir, "fmriprep", fixt_setup.sess, fixt_setup.subj
@@ -119,8 +145,7 @@ def fixt_preproc(fixt_setup):
     )
     run_fp._work_fp_bids = os.path.join(run_fp._work_fp_tmp, "bids_layout")
 
-    #
-    pp_help = UnitTestVars()
-    pp_help.fp_dict = fp_dict
-    pp_help.run_fp = run_fp
-    yield pp_help
+    # Build and yield obj
+    fp_help = UnitTestVars()
+    fp_help.fp_dict = fp_dict
+    fp
