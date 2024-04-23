@@ -4,6 +4,7 @@ submit_subprocess : submit or schedule bash commands via subprocess
 schedule_subj : generate and submit a python preprocessing script
 
 """
+
 import sys
 import subprocess
 import textwrap
@@ -60,7 +61,11 @@ def submit_subprocess(
     def _bash_sp(job_cmd: str) -> tuple:
         """Submit bash as subprocess."""
         job_sp = subprocess.Popen(
-            job_cmd, shell=True, stdout=subprocess.PIPE, env=env_input
+            job_cmd,
+            shell=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            env=env_input,
         )
         job_out, job_err = job_sp.communicate()
         job_sp.wait()
@@ -106,6 +111,7 @@ def schedule_subj(
     run_local,
     user_name,
     rsa_key,
+    schedule_job=True,
 ):
     """Schedule pipeline on compute cluster.
 
@@ -147,6 +153,9 @@ def schedule_subj(
         User name for DCC, labarserv2
     rsa_key : str, os.PathLike
         Location of RSA key for labarserv2
+    schedule_job : bool, optional
+        Whether to submit job to SLURM scheduler,
+        used for testing
 
     Returns
     -------
@@ -189,10 +198,12 @@ def schedule_subj(
     py_script = f"{log_dir}/run_preprocess_{subj}.py"
     with open(py_script, "w") as ps:
         ps.write(sbatch_cmd)
-    h_sp = subprocess.Popen(
-        f"sbatch {py_script}",
-        shell=True,
-        stdout=subprocess.PIPE,
-    )
-    h_out, h_err = h_sp.communicate()
-    print(f"{h_out.decode('utf-8')}\tfor {subj}")
+
+    if schedule_job:
+        h_sp = subprocess.Popen(
+            f"sbatch {py_script}",
+            shell=True,
+            stdout=subprocess.PIPE,
+        )
+        h_out, h_err = h_sp.communicate()
+        print(f"{h_out.decode('utf-8')}\tfor {subj}")

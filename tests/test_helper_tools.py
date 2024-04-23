@@ -77,73 +77,79 @@ def test_FslCmds(fixt_afni_fsl):
     assert chk_scale == cmd_scale_list
 
 
-def test_HelperMeths_chk_path(fixt_afni_fsl):
-    fake_path = os.path.join(
-        os.path.dirname(fixt_afni_fsl.out_scaled), "fake_dir"
-    )
-    with pytest.raises(FileNotFoundError):
-        fixt_afni_fsl.afni_fsl._chk_path(fake_path)
+class TestHelperMeths:
 
+    @pytest.fixture(autouse=True)
+    def _get_fixts(self, fixt_setup, fixt_afni_fsl):
+        self.fixt_setup = fixt_setup
+        self.fixt_afni_fsl = fixt_afni_fsl
 
-def test_HelperMeths_set_subj(fixt_setup, fixt_afni_fsl):
-    assert fixt_afni_fsl.afni_fsl.subj == fixt_setup.subj
-    assert fixt_afni_fsl.afni_fsl.out_dir == os.path.join(
-        fixt_setup.work_dir,
-        "fsl_denoise",
-        fixt_setup.subj,
-        fixt_setup.sess,
-        "func",
-    )
+    def test_chk_path(self):
+        fake_path = os.path.join(
+            os.path.dirname(self.fixt_afni_fsl.out_scaled), "fake_dir"
+        )
+        with pytest.raises(FileNotFoundError):
+            self.fixt_afni_fsl.afni_fsl._chk_path(fake_path)
 
+    def test_set_subj(self):
+        assert self.fixt_afni_fsl.afni_fsl.subj == self.fixt_setup.subj
+        assert self.fixt_afni_fsl.afni_fsl.out_dir == os.path.join(
+            self.fixt_setup.work_dir,
+            "fsl_denoise",
+            self.fixt_setup.subj,
+            self.fixt_setup.sess,
+            "func",
+        )
 
-def test_HelperMeths_submit_check(fixt_setup, fixt_afni_fsl):
-    # Run submission and check return
-    assert fixt_afni_fsl.afni_fsl._submit_check(
-        "echo foo", fixt_afni_fsl.out_scaled, "foo"
-    )
+    def test_submit_check(self):
+        # Run submission and check return
+        assert self.fixt_afni_fsl.afni_fsl._submit_check(
+            "echo foo", self.fixt_afni_fsl.out_scaled, "foo"
+        )
 
-    # Check generated file location and content
-    log_err = os.path.join(fixt_setup.log_dir, "err_foo.log")
-    log_out = os.path.join(fixt_setup.log_dir, "out_foo.log")
-    for chk_log in [log_err, log_out]:
-        assert os.path.exists(chk_log)
-    with open(log_out, "r") as lf:
-        log_content = lf.readlines()
-    assert ["foo\n"] == log_content
+        # Check generated file location and content
+        log_err = os.path.join(self.fixt_setup.log_dir, "err_foo.log")
+        log_out = os.path.join(self.fixt_setup.log_dir, "out_foo.log")
+        for chk_log in [log_err, log_out]:
+            assert os.path.exists(chk_log)
+        with open(log_out, "r") as lf:
+            log_content = lf.readlines()
+        assert ["foo\n"] == log_content
 
+    def test_parse_epi(self):
+        subj, sess, task, run, space, res, desc, suff = (
+            self.fixt_afni_fsl.afni_fsl._parse_epi(
+                self.fixt_afni_fsl.out_scaled
+            )
+        )
+        assert subj == self.fixt_setup.subj
+        assert sess == self.fixt_setup.sess
+        assert "task-rest" == task
+        assert "run-01" == run
+        assert "space-MNI152NLin6Asym" == space
+        assert "res-2" == res
+        assert "desc-scaled" == desc
+        assert "bold.nii.gz" == suff
 
-def test_HelperMeths_parse_epi(fixt_setup, fixt_afni_fsl):
-    subj, sess, task, run, space, res, desc, suff = (
-        fixt_afni_fsl.afni_fsl._parse_epi(fixt_afni_fsl.out_scaled)
-    )
-    assert subj == fixt_setup.subj
-    assert sess == fixt_setup.sess
-    assert "task-rest" == task
-    assert "run-01" == run
-    assert "space-MNI152NLin6Asym" == space
-    assert "res-2" == res
-    assert "desc-scaled" == desc
-    assert "bold.nii.gz" == suff
+    def test_job_name(self):
+        job_name = self.fixt_afni_fsl.afni_fsl._job_name(
+            self.fixt_afni_fsl.out_scaled, "foo"
+        )
+        assert (
+            f"{self.fixt_setup.subj[-4:]}_"
+            + f"{self.fixt_setup.sess.split('-')[-1]}"
+            + "_r_r1_foo"
+            == job_name
+        )
 
-
-def test_HelperMeths_job_name(fixt_setup, fixt_afni_fsl):
-    job_name = fixt_afni_fsl.afni_fsl._job_name(
-        fixt_afni_fsl.out_scaled, "foo"
-    )
-    assert (
-        f"{fixt_setup.subj[-4:]}_{fixt_setup.sess.split('-')[-1]}"
-        + "_r_r1_foo"
-        == job_name
-    )
-
-
-def test_HelperMeths_get_out_path(fixt_afni_fsl):
-    out_path = fixt_afni_fsl.afni_fsl._get_out_path(
-        fixt_afni_fsl.out_scaled, "desc-foo"
-    )
-    assert (
-        fixt_afni_fsl.out_scaled.replace("desc-scaled", "desc-foo") == out_path
-    )
+    def test_get_out_path(self):
+        out_path = self.fixt_afni_fsl.afni_fsl._get_out_path(
+            self.fixt_afni_fsl.out_scaled, "desc-foo"
+        )
+        assert (
+            self.fixt_afni_fsl.out_scaled.replace("desc-scaled", "desc-foo")
+            == out_path
+        )
 
 
 def test_FslMethods(fixt_setup, fixt_afni_fsl):
@@ -163,52 +169,59 @@ def test_FslMethods(fixt_setup, fixt_afni_fsl):
     assert 412.730621 == fixt_afni_fsl.med_value
 
 
-def test_AfniCmds_prepend_afni(fixt_setup, fixt_afni_fsl):
-    afni_head = fixt_afni_fsl.afni_fsl._prepend_afni()
-    out_dir = os.path.join(
-        fixt_setup.work_dir,
-        "fsl_denoise",
-        fixt_setup.subj,
-        fixt_setup.sess,
-        "func",
-    )
-    chk_head = [
-        "singularity",
-        "run",
-        "--cleanenv",
-        f"--bind {out_dir}:{out_dir}",
-        f"--bind {out_dir}:/opt/home",
-        os.environ["SING_AFNI"],
-    ]
-    assert chk_head == afni_head
+class TestAfniCmds:
 
+    @pytest.fixture(autouse=True)
+    def _get_fixts(self, fixt_setup, fixt_afni_fsl):
+        self.fixt_setup = fixt_setup
+        self.fixt_afni_fsl = fixt_afni_fsl
 
-def test_AfniCmds_cmd_mask_epi(fixt_afni_fsl):
-    cmd_mask = fixt_afni_fsl.afni_fsl._cmd_mask_epi(
-        "in_epi", "mask_path", "work_mask", "out_path"
-    )
-    for chk_str in [
-        "cp mask_path work_mask ;",
-        "3dcalc",
-        "-a in_epi",
-        "-b work_mask",
-        "-float",
-        "-prefix out_path",
-        "-expr 'a*step(b)'",
-    ]:
-        assert chk_str in cmd_mask
+    def test_prepend_afni(self):
+        afni_head = self.fixt_afni_fsl.afni_fsl._prepend_afni()
+        out_dir = os.path.join(
+            self.fixt_setup.work_dir,
+            "fsl_denoise",
+            self.fixt_setup.subj,
+            self.fixt_setup.sess,
+            "func",
+        )
+        chk_head = [
+            "singularity",
+            "run",
+            "--cleanenv",
+            f"--bind {out_dir}:{out_dir}",
+            f"--bind {out_dir}:/opt/home",
+            os.environ["SING_AFNI"],
+        ]
+        assert chk_head == afni_head
 
+    def test_cmd_mask_epi(self):
+        cmd_mask = self.fixt_afni_fsl.afni_fsl._cmd_mask_epi(
+            "in_epi", "mask_path", "work_mask", "out_path"
+        )
+        for chk_str in [
+            "cp mask_path work_mask ;",
+            "3dcalc",
+            "-a in_epi",
+            "-b work_mask",
+            "-float",
+            "-prefix out_path",
+            "-expr 'a*step(b)'",
+        ]:
+            assert chk_str in cmd_mask
 
-def test_AfniCmds_cmd_smooth(fixt_afni_fsl):
-    cmd_smooth = fixt_afni_fsl.afni_fsl._cmd_smooth("in_epi", 4, "out_path")
-    for chk_str in [
-        "3dmerge",
-        "-1blur_fwhm 4",
-        "-doall",
-        "-prefix out_path",
-        "in_epi",
-    ]:
-        assert chk_str in cmd_smooth
+    def test_cmd_smooth(self):
+        cmd_smooth = self.fixt_afni_fsl.afni_fsl._cmd_smooth(
+            "in_epi", 4, "out_path"
+        )
+        for chk_str in [
+            "3dmerge",
+            "-1blur_fwhm 4",
+            "-doall",
+            "-prefix out_path",
+            "in_epi",
+        ]:
+            assert chk_str in cmd_smooth
 
 
 def test_AfniMethods(fixt_afni_fsl):
