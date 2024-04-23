@@ -488,7 +488,7 @@ class _AfniCmds:
         return " ".join(self._prepend_afni() + smooth_list)
 
     def _calc_median(self, median_txt: Union[str, os.PathLike]) -> float:
-        """Calculate median from 3dROIstats columns."""
+        """Deprecated; Calculate median from 3dROIstats columns."""
         # Strip stdout, column names from txt file, fourth column
         # contains median values for each volume.
         no_head = median_txt.replace("_median.txt", "_nohead.txt")
@@ -511,7 +511,7 @@ class _AfniCmds:
         work_mask: Union[str, os.PathLike],
         out_path: Union[str, os.PathLike],
     ) -> str:
-        """Median via 3dROIstats."""
+        """Deprecated; Median via 3dROIstats."""
         cp_list = ["cp", mask_path, work_mask, ";"]
         bash_list = [
             "3dROIstats",
