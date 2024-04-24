@@ -33,7 +33,7 @@ def submit_subprocess(
         Bash syntax, work to schedule
     job_name : str
         Name for scheduler
-    log_dir : Path
+    log_dir : str, os.PathLike
         Location of output dir for writing logs
     num_hours : int, optional
         Walltime to schedule
@@ -124,28 +124,25 @@ def schedule_subj(
         BIDS subject identifier
     sess_list : list
         BIDS session identifiers
-    proj_raw : path
-        Location of project rawdata, e.g.
-        /hpc/group/labarlab/EmoRep_BIDS/rawdata
-    proj_deriv : path
-        Location of project derivatives, e.g.
-        /hpc/group/labarlab/EmoRep_BIDS/derivatives
-    work_deriv : path
-        Location of work derivatives, e.g.
-        /work/foo/EmoRep_BIDS/derivatives
+    proj_raw :str, os.PathLike
+        Location of project rawdata
+    proj_deriv : str, os.PathLike
+        Location of project derivatives
+    work_deriv : str, os.PathLike
+        Location of work derivatives
     sing_fmriprep : path, str
         Location of fmiprep singularity image
-    tplflow_dir : path, str
+    tplflow_dir : str, os.PathLike
         Clone location of templateflow
-    fs_license : path, str
+    fs_license : str, os.PathLike
         Location of FreeSurfer license
     fd_thresh : float
         Threshold for framewise displacement
     ignore_fmaps : bool
         Whether to incorporate fmaps in preprocessing
-    sing_afni : path, str
+    sing_afni : str, os.PathLike
         Location of afni singularity iamge
-    log_dir : path
+    log_dir : str, os.PathLike
         Location for writing logs
     run_local : bool
         Whether job, subprocesses are run locally

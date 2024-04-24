@@ -29,7 +29,6 @@ def fixt_setup() -> Iterator[UnitTestVars]:
     keoki_path = (
         "/mnt/keoki/experiments2/EmoRep/Exp2_Compute_Emotion/data_scanner_BIDS"
     )
-
     for mk_dir in [log_dir, work_dir, group_raw, group_deriv]:
         if not os.path.exists(mk_dir):
             os.makedirs(mk_dir)
@@ -50,6 +49,7 @@ def fixt_setup() -> Iterator[UnitTestVars]:
 
     # Setup and yield vars
     setup_help = UnitTestVars()
+    setup_help.test_dir = test_dir
     setup_help.log_dir = log_dir
     setup_help.work_dir = work_dir
     setup_help.group_raw = group_raw
@@ -63,13 +63,12 @@ def fixt_setup() -> Iterator[UnitTestVars]:
 
 def pytest_sessionfinish(session, exitstatus):
     """Teardown if all tests passed."""
-    return  # TODO remove
     if 0 == exitstatus:
         shutil.rmtree(helper.test_dir())
 
 
 @pytest.fixture(scope="session")
-def fixt_freesurfer(fixt_setup):
+def fixt_freesurfer(fixt_setup) -> Iterator[UnitTestVars]:
     """Run freesurfer methods and yield vars."""
     # Start fs instance
     run_fs = preprocess.RunFreeSurfer(
@@ -87,6 +86,17 @@ def fixt_freesurfer(fixt_setup):
     )
     mgz_path = run_fs._setup()
 
+    # Get check file
+    src = os.path.join(
+        fixt_setup.sync_data._keoki_proj,
+        "derivatives/pre_processing/freesurfer",
+        fixt_setup.sess,
+        fixt_setup.subj,
+        "mri/aparc+aseg.mgz",
+    )
+    dst = os.path.join(run_fs._work_fs, fixt_setup.subj, "mri")
+    _, _ = fixt_setup.sync_data._submit_rsync(src, dst)
+
     # Build and yield obj
     fs_help = UnitTestVars()
     fs_help.run_fs = run_fs
@@ -95,7 +105,7 @@ def fixt_freesurfer(fixt_setup):
 
 
 @pytest.fixture(scope="session")
-def fixt_fmriprep(fixt_setup):
+def fixt_fmriprep(fixt_setup) -> Iterator[UnitTestVars]:
     """Run fmriprep methods and yield vars."""
     # Download fmriprep output
     dst_fp = os.path.join(
@@ -116,6 +126,14 @@ def fixt_fmriprep(fixt_setup):
     )
     _, _ = fixt_setup.sync_data._submit_rsync(src_fp1, dst_fp)
     _, _ = fixt_setup.sync_data._submit_rsync(src_fp2, os.path.dirname(dst_fp))
+
+    # Rename html to original
+    html_path = os.path.join(
+        os.path.dirname(dst_fp), f"{fixt_setup.subj}_{fixt_setup.sess}.html"
+    )
+    os.rename(
+        html_path, html_path.replace(f"_{fixt_setup.sess}.html", ".html")
+    )
 
     # Get fmriprep files
     run_fp = preprocess.RunFmriprep(
@@ -155,11 +173,13 @@ def fixt_fmriprep(fixt_setup):
     fp_help.fp_dict = fp_dict
     fp_help.small_fp_dict = small_fp_dict
     fp_help.run_fp = run_fp
+    fp_help.subj_fp = dst_fp
     yield fp_help
 
 
 @pytest.fixture(scope="session")
-def fixt_fsl_preproc(fixt_setup, fixt_fmriprep):
+def fixt_fsl_preproc(fixt_setup, fixt_fmriprep) -> Iterator[UnitTestVars]:
+    """Run fsl_preproc methods and yield vars."""
     fsl_help = UnitTestVars()
     fsl_help.scaled_list = preprocess.fsl_preproc(
         fixt_setup.work_dir,
@@ -173,7 +193,8 @@ def fixt_fsl_preproc(fixt_setup, fixt_fmriprep):
 
 
 @pytest.fixture(scope="session")
-def fixt_afni_fsl(fixt_setup, fixt_fmriprep):
+def fixt_afni_fsl(fixt_setup, fixt_fmriprep) -> Iterator[UnitTestVars]:
+    """Run ExtraPreproc methods and yield vars."""
     # Setup for and make method instance
     out_dir = os.path.join(
         fixt_setup.work_dir,

@@ -15,10 +15,7 @@ from func_preprocess import submit
 
 
 def copy_clean(subj, sess_list, proj_deriv, work_deriv, log_dir):
-    """Housekeeping for data.
-
-    Delete unneeded files from work_deriv, copy remaining to
-    the proj_deriv location.
+    """Copy data from work to proj_deriv location, remove work dirs.
 
     Parameters
     ----------
@@ -26,13 +23,11 @@ def copy_clean(subj, sess_list, proj_deriv, work_deriv, log_dir):
         BIDS subject
     sess_list : list
         BIDS session identifiers
-    proj_deriv : path
-        Project derivative location, e.g.
-        /hpc/group/labarlab/EmoRep_BIDS/derivatives
-    work_deirv : path
-        Working derivative location, e.g.
-        /work/foo/EmoRep_BIDS/derivatives
-    log_dir : path
+    proj_deriv : str, os.PathLike
+        Project derivative location
+    work_deirv : str, os.PathLike
+        Working derivative location
+    log_dir : str, os.PathLike
         Location of directory to capture logs
 
     """
@@ -61,6 +56,7 @@ def copy_clean(subj, sess_list, proj_deriv, work_deriv, log_dir):
             os.makedirs(proj_fs)
         map_dest[work_fs] = proj_fs
 
+    # Copy directories from work to group, then remove dir from work
     for src, dst in map_dest.items():
         _, _ = submit.submit_subprocess(
             True, f"cp -r {src} {dst} && rm -r {src}", "cp", log_dir
@@ -77,7 +73,7 @@ class PullPush:
     ----------
     proj_dir : str, os.PathLike
         Location of project directory on group partition
-    log_dir : path
+    log_dir : str, os.PathLike
         Output location for log files and scripts
     user_name : str
         User name for DCC, labarserv2
@@ -616,6 +612,15 @@ class ExtraPreproc(_AfniMethods, _FslMethods):
     Used for conducting extra preprocessing steps following fMRIPrep.
 
     Inherits _AfniMethods, _FslMethods.
+
+    Parameters
+    ----------
+    log_dir : str, os.PathLike
+        Location of directory for logging
+    run_local : bool
+        Whether workflow is running locally (labarserv2) or remotely (DCC)
+    sing_afni : str, os.PathLike
+        Location of AFNI singularity image
 
     Methods
     -------

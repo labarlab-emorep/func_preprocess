@@ -163,22 +163,22 @@ class RunFmriprep:
     ----------
     subj : str
         BIDS subject
-    proj_raw : path
+    proj_raw : str, os.PathLike
         Location of project rawdata directory
-    work_deriv : path
+    work_deriv : str, os.PathLike
         Output location for pipeline intermediates, e.g.
         /work/foo/project/derivatives
-    sing_fmriprep : path, str
+    sing_fmriprep : str, os.PathLike
         Location and image of fmriprep singularity file
-    tplflow_dir : path, str
+    tplflow_dir : str, os.PathLike
         Clone location of templateflow
-    fs_license : path, str
+    fs_license : str, os.PathLike
         Location of FreeSurfer license
     fd_thresh : float
         Threshold for framewise displacement
     ignore_fmaps : bool
         Whether to incorporate fmaps in preprocessing
-    log_dir : path
+    log_dir : str, os.PathLike
         Location of directory to capture logs
     run_local : bool
         Whether job, subprocesses are run locally
@@ -382,11 +382,11 @@ def fsl_preproc(work_deriv, fp_dict, sing_afni, subj, log_dir, run_local):
         paths to preprocessed BOLD and mask files. Required keys:
         -   [preproc_bold] = list, paths to fmriprep preproc run output
         -   [mask_bold] = list, paths to fmriprep preproc run masks
-    sing_afni : path, str
+    sing_afni : str, os.PathLike
         Location of afni singularity image
     subj : str
         BIDS subject
-    log_dir : path
+    log_dir : str, os.PathLike
         Location of directory to capture logs
     run_local : bool
         Whether job, subprocesses are run locally

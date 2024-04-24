@@ -2,11 +2,6 @@ import pytest
 import os
 
 
-@pytest.mark.integ
-def test_copy_clean():
-    pass
-
-
 def test_PullPush_pull_rawdata(fixt_setup):
     assert 11 == len(fixt_setup.group_niis)
     anat_path = fixt_setup.group_niis[0]
