@@ -27,7 +27,7 @@ def test_submit_subprocess_sched(fixt_setup):
 
 class Test_schedule_subj:
 
-    @pytest.fixture(scope="module", autouse=True)
+    @pytest.fixture(autouse=True)
     def _get_fixts(self, fixt_setup):
         """Make, set fixtures as attrs."""
         self.fixt_setup = fixt_setup
