@@ -31,7 +31,9 @@ def test_PullPush_pull_rawdata(fixt_setup):
     assert "bold.nii.gz" == suff
 
 
+@pytest.mark.preproc
 def test_FslCmds(fixt_afni_fsl):
+    # Check temporal mean command
     cmd_tmean = fixt_afni_fsl.afni_fsl._cmd_tmean("in_epi", "out_path")
     cmd_tmean_list = cmd_tmean.split()
     chk_tmean = [
@@ -42,6 +44,7 @@ def test_FslCmds(fixt_afni_fsl):
     ]
     assert chk_tmean == cmd_tmean_list
 
+    # Check bandpass command
     cmd_tfilt = fixt_afni_fsl.afni_fsl._cmd_tfilt(
         "in_epi", "out_path", 25, "in_tmean"
     )
@@ -58,6 +61,7 @@ def test_FslCmds(fixt_afni_fsl):
     ]
     assert chk_tfilt == cmd_tfilt_list
 
+    # Chekc scale command
     cmd_scale = fixt_afni_fsl.afni_fsl._cmd_scale(
         "in_epi", "out_path", fixt_afni_fsl.med_value
     )
@@ -72,6 +76,7 @@ def test_FslCmds(fixt_afni_fsl):
     assert chk_scale == cmd_scale_list
 
 
+@pytest.mark.preproc
 class TestHelperMeths:
 
     @pytest.fixture(autouse=True)
@@ -147,6 +152,7 @@ class TestHelperMeths:
         )
 
 
+@pytest.mark.preproc
 def test_FslMethods(fixt_setup, fixt_afni_fsl):
     # init
     assert fixt_afni_fsl.afni_fsl._log_dir == fixt_setup.log_dir
@@ -164,6 +170,7 @@ def test_FslMethods(fixt_setup, fixt_afni_fsl):
     assert 412.730621 == fixt_afni_fsl.med_value
 
 
+@pytest.mark.preproc
 class TestAfniCmds:
 
     @pytest.fixture(autouse=True)
@@ -219,6 +226,7 @@ class TestAfniCmds:
             assert chk_str in cmd_smooth
 
 
+@pytest.mark.preproc
 def test_AfniMethods(fixt_afni_fsl):
     # init
     assert os.environ["SING_AFNI"] == fixt_afni_fsl.afni_fsl._sing_afni
@@ -234,6 +242,7 @@ def test_AfniMethods(fixt_afni_fsl):
     )
 
 
+@pytest.mark.preproc
 def test_ExtraPreproc(fixt_afni_fsl):
     # Required methods in preprocess
     assert hasattr(fixt_afni_fsl.afni_fsl, "tmean")

@@ -7,6 +7,7 @@ from func_preprocess import workflows
 
 
 def _submit_bash(cmd: str):
+    """Submit bash subprocess."""
     job_sp = subprocess.Popen(
         cmd,
         shell=True,
@@ -77,8 +78,8 @@ def fixt_wf_setup(
         os.environ["SING_AFNI"],
         fixt_setup.log_dir,
         False,
-        os.environ["USER"],
-        os.environ["RSA_LS2"],
+        user_name=os.environ["USER"],
+        rsa_key=os.environ["RSA_LS2"],
         test_mode=True,
     )
 
@@ -162,11 +163,13 @@ class Test_run_preproc:
 
     @pytest.fixture(autouse=True)
     def _get_fixts(self, fixt_setup, fixt_wf_setup):
+        """Set fixtures as attrs."""
         self.fixt_setup = fixt_setup
         self.fixt_wf_setup = fixt_wf_setup
 
     @property
     def _fsl_path(self) -> Union[str, os.PathLike]:
+        """Return path to FSL subj/sess/func dir."""
         return os.path.join(
             self.fixt_wf_setup.group_fsl_path,
             self.fixt_setup.subj,
@@ -176,6 +179,7 @@ class Test_run_preproc:
 
     @property
     def _fs_path(self) -> Union[str, os.PathLike]:
+        """Return path to freesurfer sess/subj/mri dir."""
         return os.path.join(
             self.fixt_wf_setup.group_fs_path,
             self.fixt_setup.sess,

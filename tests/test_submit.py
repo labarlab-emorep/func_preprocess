@@ -27,10 +27,12 @@ def test_submit_subprocess_sched(fixt_setup):
 
 class Test_schedule_subj:
 
-    @pytest.fixture(autouse=True)
+    @pytest.fixture(scope="module", autouse=True)
     def _get_fixts(self, fixt_setup):
+        """Make, set fixtures as attrs."""
         self.fixt_setup = fixt_setup
 
+        # Write a preproc script
         submit.schedule_subj(
             fixt_setup.subj,
             [fixt_setup.sess],
@@ -52,6 +54,8 @@ class Test_schedule_subj:
         py_script = os.path.join(
             fixt_setup.log_dir, f"run_preprocess_{fixt_setup.subj}.py"
         )
+
+        # Get info from preproc script
         with open(py_script, "r") as pf:
             lines = pf.readlines()
         self.lines = [x.strip() for x in lines]
@@ -59,6 +63,7 @@ class Test_schedule_subj:
 
     @property
     def _head_opts(self) -> dict:
+        """Return {line num: SBATCH command}."""
         return {
             0: f"#!/bin/env {sys.executable}",
             2: f"#SBATCH --job-name=p{self.subjid}",
@@ -74,6 +79,7 @@ class Test_schedule_subj:
 
     @property
     def _body_opts(self) -> dict:
+        """Return {line num: pipeline argument}."""
         # More options could be tested, these
         # were easiest to avoid str issues.
         return {
