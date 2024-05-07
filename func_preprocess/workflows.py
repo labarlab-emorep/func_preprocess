@@ -3,6 +3,7 @@
 run_preproc : coordinate methods for preprocessing workflow
 
 """
+
 import os
 import shutil
 from func_preprocess import preprocess, helper_tools
@@ -25,6 +26,7 @@ def run_preproc(
     user_name=None,
     rsa_key=None,
     keoki_path="/mnt/keoki/experiments2/EmoRep/Exp2_Compute_Emotion/data_scanner_BIDS",  # noqa: E501
+    test_mode=False,
 ):
     """Functional preprocessing pipeline for EmoRep.
 
@@ -34,28 +36,25 @@ def run_preproc(
         BIDS subject identifier
     sess_list : list
         BIDS session identifiers
-    proj_raw : path
-        Location of project rawdata, e.g.
-        /hpc/group/labarlab/EmoRep_BIDS/rawdata
-    proj_deriv : path
-        Location of project derivatives, e.g.
-        /hpc/group/labarlab/EmoRep_BIDS/derivatives
-    work_deriv : path
-        Location of work derivatives, e.g.
-        /work/foo/EmoRep_BIDS/derivatives
-    sing_fmriprep : path, str
+    proj_raw : str, os.PathLike
+        Location of project rawdata
+    proj_deriv : str, os.PathLike
+        Location of project derivatives
+    work_deriv : str, os.PathLike
+        Location of work derivatives
+    sing_fmriprep : str, os.PathLike
         Location of fmiprep singularity image
-    tplflow_dir : path, str
+    tplflow_dir : str, os.PathLike
         Clone location of templateflow
-    fs_license : path, str
+    fs_license : str, os.PathLike
         Location of FreeSurfer license
     fd_thresh : float
         Threshold for framewise displacement
     ignore_fmaps : bool
         Whether to incorporate fmaps in preprocessing
-    sing_afni : path, str
+    sing_afni : str, os.PathLike
         Location of afni singularity iamge
-    log_dir : path
+    log_dir : str, os.PathLike
         Location for writing logs
     run_local : bool
         Whether job, subprocesses are run locally
@@ -65,6 +64,8 @@ def run_preproc(
         Location of RSA key for labarserv2
     keoki_path : str, os.PathLike, optional
         Location of project directory on Keoki
+    test_mode : bool, optional
+        Used to avoid data push, cleanup during testing
 
     Raises
     ------
@@ -94,7 +95,7 @@ def run_preproc(
             os.path.dirname(proj_raw), log_dir, user_name, rsa_key, keoki_path
         )
         for sess in sess_list:
-            sync_data.pull_rawdata(subj, sess)
+            _ = sync_data.pull_rawdata(subj, sess)
 
     # Run FreeSurfer, fMRIPrep
     run_fs = preprocess.RunFreeSurfer(
@@ -130,6 +131,7 @@ def run_preproc(
     if run_local:
         return
 
+    # Copy files from work to group partition
     helper_tools.copy_clean(
         subj,
         sess_list,
@@ -137,5 +139,9 @@ def run_preproc(
         work_deriv,
         log_dir,
     )
+
+    # Send data to keoki and clean up
+    if test_mode:
+        return
     sync_data.push_derivatives(sess_list)
     shutil.rmtree(os.path.join(proj_raw, subj))

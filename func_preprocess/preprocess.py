@@ -5,6 +5,7 @@ RunFmriprep : run fmriprep for each session
 fsl_preproc : conduct extra preprocessing steps
 
 """
+
 import os
 import glob
 import json
@@ -17,6 +18,17 @@ class RunFreeSurfer:
     """Run FreeSurfer's recon-all for a specific subject.
 
     FreeSurfer SUBJECTS_DIR is organized by session.
+
+    Parameters
+    ----------
+    subj : str
+        BIDS subject
+    proj_raw : str, os.PathLike
+        Location of project rawdata directory
+    work_deriv : str, os.PathLike
+        Output location for pipeline intermediates
+    log_dir : str, os.PathLike
+        Location for capturing stdout/err
 
     Methods
     -------
@@ -31,20 +43,7 @@ class RunFreeSurfer:
     """
 
     def __init__(self, subj, proj_raw, work_deriv, log_dir, run_local):
-        """Initialize.
-
-        Parameters
-        ----------
-        subj : str
-            BIDS subject
-        proj_raw : str, os.PathLike
-            Location of project rawdata directory
-        work_deriv : str, os.PathLike
-            Output location for pipeline intermediates
-        log_dir : str, os.PathLike
-            Location for capturing stdout/err
-
-        """
+        """Initialize."""
         print("Initializing RunFreeSurfer")
         self._subj = subj
         self._proj_raw = proj_raw
@@ -52,15 +51,8 @@ class RunFreeSurfer:
         self._log_dir = log_dir
         self._run_local = run_local
 
-    def recon_all(self, sess_list):
-        """Spawn a freesurfer recon-all command for each session.
-
-        Parameters
-        ----------
-        sess_list : list
-            Session identifiers
-
-        """
+    def recon_all(self, sess_list: list):
+        """Spawn a freesurfer recon-all command for each session."""
         mult_proc = [
             Process(
                 target=self._exec_fs,
@@ -95,7 +87,7 @@ class RunFreeSurfer:
             return
 
         # Construct recon-all command, execute
-        self._setup()
+        _ = self._setup()
         bash_list = [
             "recon-all",
             f"-subjid {self._subj}",
@@ -116,7 +108,7 @@ class RunFreeSurfer:
         if not os.path.exists(out_file):
             raise FileNotFoundError(f"Expected FreeSurfer output : {out_file}")
 
-    def _setup(self):
+    def _setup(self) -> Union[str, os.PathLike]:
         """Setup freesurfer subject's directory, make 001.mgz."""
 
         # Setup directory structures
@@ -128,11 +120,13 @@ class RunFreeSurfer:
             self._sess,
             self._subj,
         )
-        subj_fs = os.path.join(self._work_fs, self._subj, "mri/orig")
-        if os.path.exists(os.path.join(subj_fs, "001.mgz")):
-            return
-        for h_dir in [proj_subj, subj_fs]:
-            os.makedirs(h_dir, exist_ok=True)
+        out_dir = os.path.join(self._work_fs, self._subj, "mri/orig")
+        out_path = os.path.join(out_dir, "001.mgz")
+        if os.path.exists(out_path):
+            return out_path
+        for h_dir in [proj_subj, out_dir]:
+            if not os.path.exists(h_dir):
+                os.makedirs(h_dir)
 
         # Get rawdata T1w
         subj_t1 = os.path.join(
@@ -148,17 +142,46 @@ class RunFreeSurfer:
             )
 
         # Convert anat nifti to mgz
-        bash_cmd = f"mri_convert {subj_t1} {subj_fs}/001.mgz"
+        bash_cmd = f"mri_convert {subj_t1} {out_path}"
         _, _ = submit.submit_subprocess(
             True,
             bash_cmd,
             f"{self._subj[-4:]}_{self._sess[4:]}_conv",
             self._log_dir,
         )
+        if not os.path.exists(out_path):
+            raise FileNotFoundError(
+                f"Expected mri_convert output : {out_path}"
+            )
+        return out_path
 
 
 class RunFmriprep:
     """Run fMRIPrep for a specific subject.
+
+    Parameters
+    ----------
+    subj : str
+        BIDS subject
+    proj_raw : str, os.PathLike
+        Location of project rawdata directory
+    work_deriv : str, os.PathLike
+        Output location for pipeline intermediates, e.g.
+        /work/foo/project/derivatives
+    sing_fmriprep : str, os.PathLike
+        Location and image of fmriprep singularity file
+    tplflow_dir : str, os.PathLike
+        Clone location of templateflow
+    fs_license : str, os.PathLike
+        Location of FreeSurfer license
+    fd_thresh : float
+        Threshold for framewise displacement
+    ignore_fmaps : bool
+        Whether to incorporate fmaps in preprocessing
+    log_dir : str, os.PathLike
+        Location of directory to capture logs
+    run_local : bool
+        Whether job, subprocesses are run locally
 
     Methods
     -------
@@ -188,33 +211,7 @@ class RunFmriprep:
         log_dir,
         run_local,
     ):
-        """Initialize.
-
-        Parameters
-        ----------
-        subj : str
-            BIDS subject
-        proj_raw : path
-            Location of project rawdata directory
-        work_deriv : path
-            Output location for pipeline intermediates, e.g.
-            /work/foo/project/derivatives
-        sing_fmriprep : path, str
-            Location and image of fmriprep singularity file
-        tplflow_dir : path, str
-            Clone location of templateflow
-        fs_license : path, str
-            Location of FreeSurfer license
-        fd_thresh : float
-            Threshold for framewise displacement
-        ignore_fmaps : bool
-            Whether to incorporate fmaps in preprocessing
-        log_dir : path
-            Location of directory to capture logs
-        run_local : bool
-            Whether job, subprocesses are run locally
-
-        """
+        """Initialize."""
         print("Initializing RunFmriprep")
         self._subj = subj
         self._proj_raw = proj_raw
@@ -228,15 +225,8 @@ class RunFmriprep:
         self._log_dir = log_dir
         self._run_local = run_local
 
-    def fmriprep(self, sess_list):
-        """Spawn an fMRIPrep job for each session.
-
-        Parameters
-        ----------
-        sess_list : list
-            Session identifiers
-
-        """
+    def fmriprep(self, sess_list: list):
+        """Spawn an fMRIPrep job for each session."""
         mult_proc = [
             Process(
                 target=self._exec_fp,
@@ -249,7 +239,7 @@ class RunFmriprep:
         for proc in mult_proc:
             proc.join()
 
-    def _exec_fp(self, sess):
+    def _exec_fp(self, sess: str):
         """Setup for, write, and execute fmriprep."""
         # Avoid repeating work
         self._sess = sess
@@ -350,7 +340,7 @@ class RunFmriprep:
             bash_list.append("--ignore fieldmaps")
         return " ".join(bash_list)
 
-    def get_output(self):
+    def get_output(self) -> dict:
         """Return dictionary of files for extra preprocessing."""
 
         # Make list of needed files for FSL denoising
@@ -392,11 +382,11 @@ def fsl_preproc(work_deriv, fp_dict, sing_afni, subj, log_dir, run_local):
         paths to preprocessed BOLD and mask files. Required keys:
         -   [preproc_bold] = list, paths to fmriprep preproc run output
         -   [mask_bold] = list, paths to fmriprep preproc run masks
-    sing_afni : path, str
+    sing_afni : str, os.PathLike
         Location of afni singularity image
     subj : str
         BIDS subject
-    log_dir : path
+    log_dir : str, os.PathLike
         Location of directory to capture logs
     run_local : bool
         Whether job, subprocesses are run locally
@@ -424,7 +414,7 @@ def fsl_preproc(work_deriv, fp_dict, sing_afni, subj, log_dir, run_local):
 
     # Set up for extra preprocessing
     work_fsl = os.path.join(work_deriv, "fsl_denoise")
-    afni_fsl = helper_tools.AfniFslMethods(log_dir, run_local, sing_afni)
+    afni_fsl = helper_tools.ExtraPreproc(log_dir, run_local, sing_afni)
 
     def _preproc(
         run_epi: Union[str, os.PathLike], run_mask: Union[str, os.PathLike]
@@ -433,39 +423,30 @@ def fsl_preproc(work_deriv, fp_dict, sing_afni, subj, log_dir, run_local):
         # Setup output location
         sess = "ses-" + run_epi.split("ses-")[1].split("/")[0]
         out_dir = os.path.join(work_fsl, subj, sess, "func")
-        os.makedirs(out_dir, exist_ok=True)
+        if not os.path.exists(out_dir):
+            os.makedirs(out_dir)
         afni_fsl.set_subj(subj, out_dir)
 
         # Set up filenames, check for work
         file_prefix = os.path.basename(run_epi).split("desc-")[0]
         run_out = os.path.join(
-            out_dir, f"{file_prefix}desc-smoothed_bold.nii.gz"
+            out_dir, f"{file_prefix}desc-scaled_bold.nii.gz"
         )
         if os.path.exists(run_out):
             return
 
         # Find mean timeseries and filter
-        run_tmean = afni_fsl.tmean(
-            run_epi, f"{file_prefix}desc-tmean_bold.nii.gz"
-        )
-        run_bandpass = afni_fsl.bandpass(
-            run_epi, run_tmean, f"{file_prefix}desc-tfilt_bold.nii.gz"
-        )
+        run_tmean = afni_fsl.tmean(run_epi)
+        run_bandpass = afni_fsl.bandpass(run_epi, run_tmean)
 
         # Scale timeseries and smooth, mask
         med_value = afni_fsl.median(run_bandpass, run_mask)
         run_scaled = afni_fsl.scale(
-            run_bandpass,
-            f"{file_prefix}desc-ScaleNoMask_bold.nii.gz",
-            med_value,
+            run_bandpass, med_value, desc="desc-ScaleNoMask"
         )
-        run_smooth = afni_fsl.smooth(
-            run_scaled, 4, f"{file_prefix}desc-SmoothNoMask_bold.nii.gz"
-        )
-        _ = afni_fsl.mask_epi(
-            run_scaled, run_mask, f"{file_prefix}desc-scaled_bold.nii.gz"
-        )
-        _ = afni_fsl.mask_epi(run_smooth, run_mask, os.path.basename(run_out))
+        run_smooth = afni_fsl.smooth(run_scaled, 4, desc="desc-SmoothNoMask")
+        _ = afni_fsl.mask_epi(run_scaled, run_mask, desc="desc-scaled")
+        _ = afni_fsl.mask_epi(run_smooth, run_mask, desc="desc-smoothed")
 
     # Multiprocess locally, serially on DCC to avoid oom-kill events
     # (cgroup out-of-memory handler) which arise when processing >4

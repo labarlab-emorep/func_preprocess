@@ -4,6 +4,7 @@ submit_subprocess : submit or schedule bash commands via subprocess
 schedule_subj : generate and submit a python preprocessing script
 
 """
+
 import sys
 import subprocess
 import textwrap
@@ -32,7 +33,7 @@ def submit_subprocess(
         Bash syntax, work to schedule
     job_name : str
         Name for scheduler
-    log_dir : Path
+    log_dir : str, os.PathLike
         Location of output dir for writing logs
     num_hours : int, optional
         Walltime to schedule
@@ -60,7 +61,11 @@ def submit_subprocess(
     def _bash_sp(job_cmd: str) -> tuple:
         """Submit bash as subprocess."""
         job_sp = subprocess.Popen(
-            job_cmd, shell=True, stdout=subprocess.PIPE, env=env_input
+            job_cmd,
+            shell=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            env=env_input,
         )
         job_out, job_err = job_sp.communicate()
         job_sp.wait()
@@ -106,6 +111,7 @@ def schedule_subj(
     run_local,
     user_name,
     rsa_key,
+    schedule_job=True,
 ):
     """Schedule pipeline on compute cluster.
 
@@ -118,28 +124,25 @@ def schedule_subj(
         BIDS subject identifier
     sess_list : list
         BIDS session identifiers
-    proj_raw : path
-        Location of project rawdata, e.g.
-        /hpc/group/labarlab/EmoRep_BIDS/rawdata
-    proj_deriv : path
-        Location of project derivatives, e.g.
-        /hpc/group/labarlab/EmoRep_BIDS/derivatives
-    work_deriv : path
-        Location of work derivatives, e.g.
-        /work/foo/EmoRep_BIDS/derivatives
+    proj_raw :str, os.PathLike
+        Location of project rawdata
+    proj_deriv : str, os.PathLike
+        Location of project derivatives
+    work_deriv : str, os.PathLike
+        Location of work derivatives
     sing_fmriprep : path, str
         Location of fmiprep singularity image
-    tplflow_dir : path, str
+    tplflow_dir : str, os.PathLike
         Clone location of templateflow
-    fs_license : path, str
+    fs_license : str, os.PathLike
         Location of FreeSurfer license
     fd_thresh : float
         Threshold for framewise displacement
     ignore_fmaps : bool
         Whether to incorporate fmaps in preprocessing
-    sing_afni : path, str
+    sing_afni : str, os.PathLike
         Location of afni singularity iamge
-    log_dir : path
+    log_dir : str, os.PathLike
         Location for writing logs
     run_local : bool
         Whether job, subprocesses are run locally
@@ -147,6 +150,9 @@ def schedule_subj(
         User name for DCC, labarserv2
     rsa_key : str, os.PathLike
         Location of RSA key for labarserv2
+    schedule_job : bool, optional
+        Whether to submit job to SLURM scheduler,
+        used for testing
 
     Returns
     -------
@@ -189,10 +195,12 @@ def schedule_subj(
     py_script = f"{log_dir}/run_preprocess_{subj}.py"
     with open(py_script, "w") as ps:
         ps.write(sbatch_cmd)
-    h_sp = subprocess.Popen(
-        f"sbatch {py_script}",
-        shell=True,
-        stdout=subprocess.PIPE,
-    )
-    h_out, h_err = h_sp.communicate()
-    print(f"{h_out.decode('utf-8')}\tfor {subj}")
+
+    if schedule_job:
+        h_sp = subprocess.Popen(
+            f"sbatch {py_script}",
+            shell=True,
+            stdout=subprocess.PIPE,
+        )
+        h_out, h_err = h_sp.communicate()
+        print(f"{h_out.decode('utf-8')}\tfor {subj}")
