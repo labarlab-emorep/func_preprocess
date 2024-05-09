@@ -17,7 +17,7 @@ from func_preprocess import submit
 def check_env():
     """Raise EnvironmentError is missing required globals."""
     for chk_env in [
-        "FSL_DIR",
+        "FSLDIR",
         "SING_AFNI",
         "SING_FMRIPREP",
         "FS_LICENSE",
