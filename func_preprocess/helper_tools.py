@@ -14,6 +14,21 @@ from typing import Union, Tuple
 from func_preprocess import submit
 
 
+def check_env():
+    """Raise EnvironmentError is missing required globals."""
+    for chk_env in [
+        "FSL_DIR",
+        "SING_AFNI",
+        "SING_FMRIPREP",
+        "FS_LICENSE",
+        "SINGULARITYENV_TEMPLATEFLOW_HOME",
+    ]:
+        try:
+            os.environ[chk_env]
+        except KeyError:
+            raise EnvironmentError(f"Missing required global var : {chk_env}")
+
+
 def copy_clean(subj, sess_list, proj_deriv, work_deriv, log_dir):
     """Copy data from work to proj_deriv location, remove work dirs.
 
@@ -58,9 +73,7 @@ def copy_clean(subj, sess_list, proj_deriv, work_deriv, log_dir):
 
     # Copy directories from work to group, then remove dir from work
     for src, dst in map_dest.items():
-        _, _ = submit.submit_subprocess(
-            True, f"cp -r {src} {dst} && rm -r {src}", "cp", log_dir
-        )
+        _, _ = submit.submit_subprocess(f"cp -r {src} {dst} && rm -r {src}")
 
 
 class PullPush:
@@ -75,10 +88,6 @@ class PullPush:
         Location of project directory on group partition
     log_dir : str, os.PathLike
         Output location for log files and scripts
-    user_name : str
-        User name for DCC, labarserv2
-    rsa_key : str, os.PathLike
-        Location of RSA key for labarserv2
     keoki_path : str, os.PathLike
         Location of project directory on Keoki
 
@@ -105,17 +114,21 @@ class PullPush:
         self,
         proj_dir,
         log_dir,
-        user_name,
-        rsa_key,
         keoki_path,
     ):
         """Initialize."""
         print("Initializing PullPush")
+        try:
+            os.environ["RSA_LS2"]
+        except KeyError as e:
+            print("Exepcted global var RSA_LS2")
+            raise e
+
         self._dcc_proj = proj_dir
-        self._user_name = user_name
         self._keoki_ip = "ccn-labarserv2.vm.duke.edu"
-        self._keoki_proj = f"{self._user_name}@{self._keoki_ip}:{keoki_path}"
-        self._rsa_key = rsa_key
+        self._keoki_proj = (
+            f"{os.environ['USER']}@{self._keoki_ip}:{keoki_path}"
+        )
         self._log_dir = log_dir
 
     def pull_rawdata(self, subj, sess):
@@ -205,22 +218,15 @@ class PullPush:
         """Execute rsync between DCC and labarserv2."""
         bash_cmd = f"""\
             rsync \
-            -e 'ssh -i {self._rsa_key}' \
+            -e 'ssh -i {os.environ["RSA_LS2"]}' \
             -rauv {src} {dst}
         """
-        job_out, job_err = submit.submit_subprocess(
-            True,
-            bash_cmd,
-            f"{self._subj[-4:]}_{self._sess[4:]}_pullPush",
-            self._log_dir,
-        )
+        job_out, job_err = submit.submit_subprocess(bash_cmd)
         return (job_out, job_err)
 
     def _submit_rm(self, rm_path: Union[str, os.PathLike]):
         """Remove file tree."""
-        _, _ = submit.submit_subprocess(
-            True, f"rm -r {rm_path}", "rm", self._log_dir
-        )
+        _, _ = submit.submit_subprocess(f"rm -r {rm_path}")
 
 
 class _FslCmds:
@@ -291,8 +297,7 @@ class _HelperMeths:
         self, bash_cmd: str, out_path: Union[str, os.PathLike], job_name: str
     ) -> bool:
         """Submit shell command and return True if output is found."""
-        stdout, stderr = submit.submit_subprocess(
-            self._run_local,
+        stdout, stderr = submit.schedule_subprocess(
             bash_cmd,
             job_name,
             self._log_dir,
@@ -331,13 +336,10 @@ class _HelperMeths:
 class _FslMethods(_FslCmds, _HelperMeths):
     """Collection of FSL methods for processing EPI data."""
 
-    def __init__(self, log_dir: Union[str, os.PathLike], run_local: bool):
+    def __init__(self, log_dir: Union[str, os.PathLike]):
         """Initialize."""
         self._chk_path(log_dir)
-        if not isinstance(run_local, bool):
-            raise TypeError("Unexpected type for run_local")
         self._log_dir = log_dir
-        self._run_local = run_local
 
     def tmean(
         self,
@@ -439,13 +441,19 @@ class _AfniCmds:
 
     def _prepend_afni(self) -> list:
         """Return singularity call setup."""
+        try:
+            os.environ["SING_AFNI"]
+        except KeyError as e:
+            print("Missing global var SING_AFNI")
+            raise e
+
         return [
             "singularity",
             "run",
             "--cleanenv",
             f"--bind {self.out_dir}:{self.out_dir}",
             f"--bind {self.out_dir}:/opt/home",
-            self._sing_afni,
+            os.environ["SING_AFNI"],
         ]
 
     def _cmd_mask_epi(
@@ -488,10 +496,8 @@ class _AfniCmds:
         # Strip stdout, column names from txt file, fourth column
         # contains median values for each volume.
         no_head = median_txt.replace("_median.txt", "_nohead.txt")
-        # cut_head = 4 if self._run_local else 5
-        cut_head = 4
         bash_cmd = f"""
-            tail -n +{cut_head} {median_txt} > {no_head}
+            tail -n +4 {median_txt} > {no_head}
             awk \
                 '{{total += $4; count++ }} END {{ print total/count }}' \
                 {no_head}
@@ -525,14 +531,9 @@ class _AfniMethods(_AfniCmds, _HelperMeths):
     def __init__(
         self,
         log_dir: Union[str, os.PathLike],
-        run_local: bool,
-        sing_afni: Union[str, os.PathLike],
     ):
         """Initialize."""
-        self._chk_path(sing_afni)
         self._log_dir = log_dir
-        self._run_local = run_local
-        self._sing_afni = sing_afni
 
     def mask_epi(
         self,
@@ -617,10 +618,6 @@ class ExtraPreproc(_AfniMethods, _FslMethods):
     ----------
     log_dir : str, os.PathLike
         Location of directory for logging
-    run_local : bool
-        Whether workflow is running locally (labarserv2) or remotely (DCC)
-    sing_afni : str, os.PathLike
-        Location of AFNI singularity image
 
     Methods
     -------
@@ -644,10 +641,8 @@ class ExtraPreproc(_AfniMethods, _FslMethods):
     def __init__(
         self,
         log_dir: Union[str, os.PathLike],
-        run_local: bool,
-        sing_afni: Union[str, os.PathLike],
     ):
         """Initialize."""
         print("Initializing ExtraPreproc.")
-        _AfniMethods.__init__(self, log_dir, run_local, sing_afni)
-        _FslMethods.__init__(self, log_dir, run_local)
+        _AfniMethods.__init__(self, log_dir)
+        _FslMethods.__init__(self, log_dir)
