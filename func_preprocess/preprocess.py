@@ -119,12 +119,14 @@ class RunFreeSurfer:
             self._subj,
         )
         out_dir = os.path.join(self._work_fs, self._subj, "mri/orig")
-        out_path = os.path.join(out_dir, "001.mgz")
-        if os.path.exists(out_path):
-            return out_path
         for h_dir in [proj_subj, out_dir]:
             if not os.path.exists(h_dir):
                 os.makedirs(h_dir)
+
+        # Check for previous setup
+        out_path = os.path.join(out_dir, "001.mgz")
+        if os.path.exists(out_path):
+            return out_path
 
         # Get rawdata T1w
         subj_t1 = os.path.join(
@@ -430,7 +432,7 @@ def fsl_preproc(work_deriv, fp_dict, subj, log_dir):
     for run_epi, run_mask in zip(
         fp_dict["preproc_bold"], fp_dict["mask_bold"]
     ):
-        _preproc(subj, run_epi, run_mask, afni_fsl)
+        _preproc(subj, run_epi, run_mask, work_fsl, afni_fsl)
 
     # Check for expected number of files
     scaled_files = glob.glob(

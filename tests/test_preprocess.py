@@ -17,7 +17,7 @@ def test_RunFreeSurfer_setup(fixt_setup, fixt_freesurfer):
     # Check group dir
     fs_group = os.path.join(
         fixt_setup.group_deriv,
-        "pre_processing/freesurfer",
+        "freesurfer",
         fixt_setup.sess,
         fixt_setup.subj,
     )

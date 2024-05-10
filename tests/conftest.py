@@ -25,7 +25,7 @@ def fixt_setup() -> Iterator[UnitTestVars]:
     work_dir = os.path.join(test_dir, "work")
     group_dir = os.path.join(test_dir, "group")
     group_raw = os.path.join(group_dir, "rawdata")
-    group_deriv = os.path.join(group_dir, "derivatives")
+    group_deriv = os.path.join(group_dir, "derivatives/pre_processing")
     keoki_path = (
         "/mnt/keoki/experiments2/EmoRep/Exp2_Compute_Emotion/data_scanner_BIDS"
     )
@@ -41,8 +41,6 @@ def fixt_setup() -> Iterator[UnitTestVars]:
     sync_data = helper_tools.PullPush(
         group_dir,
         log_dir,
-        os.environ["USER"],
-        os.environ["RSA_LS2"],
         keoki_path,
     )
     group_niis = sync_data.pull_rawdata(subj, sess)
@@ -76,7 +74,6 @@ def fixt_freesurfer(fixt_setup) -> Iterator[UnitTestVars]:
         fixt_setup.group_raw,
         fixt_setup.work_dir,
         fixt_setup.log_dir,
-        False,
     )
 
     # Set needed private attrs (run_fs._exec_fs), run setup
@@ -140,13 +137,9 @@ def fixt_fmriprep(fixt_setup) -> Iterator[UnitTestVars]:
         fixt_setup.subj,
         fixt_setup.group_raw,
         fixt_setup.work_dir,
-        os.environ["SING_FMRIPREP"],
-        os.environ["SINGULARITYENV_TEMPLATEFLOW_HOME"],
-        os.environ["FS_LICENSE"],
         0.5,
         True,
         fixt_setup.log_dir,
-        False,
     )
     fp_dict = run_fp.get_output()
 
@@ -184,10 +177,8 @@ def fixt_fsl_preproc(fixt_setup, fixt_fmriprep) -> Iterator[UnitTestVars]:
     fsl_help.scaled_list = preprocess.fsl_preproc(
         fixt_setup.work_dir,
         fixt_fmriprep.small_fp_dict,
-        os.environ["SING_AFNI"],
         fixt_setup.subj,
         fixt_setup.log_dir,
-        False,
     )
     yield fsl_help
 
@@ -205,9 +196,7 @@ def fixt_afni_fsl(fixt_setup, fixt_fmriprep) -> Iterator[UnitTestVars]:
     )
     if not os.path.exists(out_dir):
         os.makedirs(out_dir)
-    afni_fsl = helper_tools.ExtraPreproc(
-        fixt_setup.log_dir, False, os.environ["SING_AFNI"]
-    )
+    afni_fsl = helper_tools.ExtraPreproc(fixt_setup.log_dir)
     afni_fsl.set_subj(fixt_setup.subj, out_dir)
 
     # Prep paths, prefix

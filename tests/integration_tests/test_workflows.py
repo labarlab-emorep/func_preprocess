@@ -68,18 +68,11 @@ def fixt_wf_setup(
         fixt_setup.subj,
         [fixt_setup.sess],
         fixt_setup.group_raw,
-        os.path.join(fixt_setup.group_deriv, "pre_processing"),
+        fixt_setup.group_deriv,
         work_integ_dir,
-        os.environ["SING_FMRIPREP"],
-        os.environ["SINGULARITYENV_TEMPLATEFLOW_HOME"],
-        os.environ["FS_LICENSE"],
         0.5,
         False,
-        os.environ["SING_AFNI"],
         fixt_setup.log_dir,
-        False,
-        user_name=os.environ["USER"],
-        rsa_key=os.environ["RSA_LS2"],
         test_mode=True,
     )
 
@@ -88,15 +81,15 @@ def fixt_wf_setup(
     help_wf.work_integ_dir = work_integ_dir
     help_wf.group_fsl_path = os.path.join(
         fixt_setup.group_deriv,
-        "pre_processing/fsl_denoise",
+        "fsl_denoise",
     )
     help_wf.group_fs_path = os.path.join(
         fixt_setup.group_deriv,
-        "pre_processing/freesurfer",
+        "freesurfer",
     )
     help_wf.group_fp_path = os.path.join(
         fixt_setup.group_deriv,
-        "pre_processing/fmriprep",
+        "fmriprep",
     )
     yield help_wf
 

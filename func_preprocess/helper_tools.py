@@ -1,5 +1,6 @@
 """Methods to support preprocessing.
 
+check_env : raise EnvironmentError for missing globals
 copy_clean : copy intermediates in work to group, purge work
 PullPush : down/upload relevant files from/to Keoki
 ExtraPreproc : FSL and AFNI methods for extra preprocessing steps
