@@ -316,7 +316,16 @@ class _HelperMeths:
 
     def _parse_epi(self, epi_path: Union[str, os.PathLike]) -> Tuple:
         """Return BIDS sub, ses, task, run, space, res, desc, suff values."""
-        return os.path.basename(epi_path).split("_")
+        # Support EmoRep and NKI BIDS fields
+        try:
+            subj, sess, task, run, space, res, desc, suff = os.path.basename(
+                epi_path
+            ).split("_")
+        except ValueError:
+            subj, sess, task, _, run, space, res, desc, suff = (
+                os.path.basename(epi_path).split("_")
+            )
+        return (subj, sess, task, run, space, res, desc, suff)
 
     def _job_name(self, epi_path: Union[str, os.PathLike], name: str) -> str:
         """Return job name, including session and run number."""
@@ -327,6 +336,7 @@ class _HelperMeths:
         self, in_epi: Union[str, os.PathLike], desc: str
     ) -> Union[str, os.PathLike]:
         """Return new output file path/name given desc."""
+        # Support EmoRep and NKI BIDS fields
         subj, sess, task, run, space, res, _, suff = self._parse_epi(in_epi)
         return os.path.join(
             self.out_dir,
