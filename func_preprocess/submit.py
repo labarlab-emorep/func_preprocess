@@ -1,6 +1,7 @@
 """Methods for controlling sbatch and subprocess submissions.
 
-submit_subprocess : submit or schedule bash commands via subprocess
+submit_subprocess : submit bash commands via subprocess
+schedule_subprocess : submit bash commands to SLURM scheduler
 schedule_subj : generate and submit a python preprocessing script
 
 """
@@ -10,25 +11,31 @@ import subprocess
 import textwrap
 
 
-def submit_subprocess(
-    run_local,
+def submit_subprocess(bash_cmd: str) -> tuple:
+    """Submit bash subprocess."""
+    job_sp = subprocess.Popen(
+        bash_cmd,
+        shell=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    job_out, job_err = job_sp.communicate()
+    job_sp.wait()
+    return (job_out, job_err)
+
+
+def schedule_subprocess(
     bash_cmd,
     job_name,
     log_dir,
     num_hours=1,
     num_cpus=1,
     mem_gig=4,
-    env_input=None,
 ):
-    """Run bash commands as subprocesses.
-
-    Schedule a SBATCH subprocess when run_local=False, otherwise
-    submit normal subprocess.
+    """Run bash commands as scheduled subprocesses.
 
     Parameters
     ----------
-    run_local : bool
-        Whether to run job locally
     bash_cmd : str
         Bash syntax, work to schedule
     job_name : str
@@ -41,9 +48,6 @@ def submit_subprocess(
         Number of CPUs required by job
     mem_gig : int, optional
         Job RAM requirement for each CPU (GB)
-    env_input : dict, optional
-        Extra environmental variables required by processes
-        e.g. singularity reqs
 
     Returns
     -------
@@ -58,41 +62,19 @@ def submit_subprocess(
 
     """
 
-    def _bash_sp(job_cmd: str) -> tuple:
-        """Submit bash as subprocess."""
-        job_sp = subprocess.Popen(
-            job_cmd,
-            shell=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            env=env_input,
-        )
-        job_out, job_err = job_sp.communicate()
-        job_sp.wait()
-        return (job_out, job_err)
-
-    def _write_sbatch(job_cmd: str) -> tuple:
-        """Schedule child SBATCH job."""
-        sbatch_cmd = f"""
-            sbatch \
-            -J {job_name} \
-            -t {num_hours}:00:00 \
-            --cpus-per-task={num_cpus} \
-            --mem={mem_gig}G \
-            -o {log_dir}/out_{job_name}.log \
-            -e {log_dir}/err_{job_name}.log \
-            --wait \
-            --wrap="{job_cmd}"
-        """
-        print(f"Submitting SBATCH job:\n\t{sbatch_cmd}\n")
-        job_out, job_err = _bash_sp(sbatch_cmd)
-        return (job_out, job_err)
-
-    if run_local:
-        job_out, job_err = _bash_sp(bash_cmd)
-    else:
-        job_out, job_err = _write_sbatch(bash_cmd)
-    return (job_out, job_err)
+    sbatch_cmd = f"""\
+        sbatch \
+        -J {job_name} \
+        -t {num_hours}:00:00 \
+        --cpus-per-task={num_cpus} \
+        --mem={mem_gig}G \
+        -o {log_dir}/out_{job_name}.log \
+        -e {log_dir}/err_{job_name}.log \
+        --wait \
+        --wrap="{bash_cmd}"
+    """
+    print(f"Submitting SBATCH job:\n\t{sbatch_cmd}\n")
+    return submit_subprocess(sbatch_cmd)
 
 
 def schedule_subj(
@@ -101,16 +83,9 @@ def schedule_subj(
     proj_raw,
     proj_deriv,
     work_deriv,
-    sing_fmriprep,
-    tplflow_dir,
-    fs_license,
     fd_thresh,
     ignore_fmaps,
-    sing_afni,
     log_dir,
-    run_local,
-    user_name,
-    rsa_key,
     schedule_job=True,
 ):
     """Schedule pipeline on compute cluster.
@@ -130,33 +105,15 @@ def schedule_subj(
         Location of project derivatives
     work_deriv : str, os.PathLike
         Location of work derivatives
-    sing_fmriprep : path, str
-        Location of fmiprep singularity image
-    tplflow_dir : str, os.PathLike
-        Clone location of templateflow
-    fs_license : str, os.PathLike
-        Location of FreeSurfer license
     fd_thresh : float
         Threshold for framewise displacement
     ignore_fmaps : bool
         Whether to incorporate fmaps in preprocessing
-    sing_afni : str, os.PathLike
-        Location of afni singularity iamge
     log_dir : str, os.PathLike
         Location for writing logs
-    run_local : bool
-        Whether job, subprocesses are run locally
-    user_name : str
-        User name for DCC, labarserv2
-    rsa_key : str, os.PathLike
-        Location of RSA key for labarserv2
     schedule_job : bool, optional
         Whether to submit job to SLURM scheduler,
-        used for testing
-
-    Returns
-    -------
-    None
+        used for testing.
 
     """
     sbatch_cmd = f"""\
@@ -178,16 +135,9 @@ def schedule_subj(
             "{proj_raw}",
             "{proj_deriv}",
             "{work_deriv}",
-            "{sing_fmriprep}",
-            "{tplflow_dir}",
-            "{fs_license}",
             {fd_thresh},
             {ignore_fmaps},
-            "{sing_afni}",
             "{log_dir}",
-            {run_local},
-            "{user_name}",
-            "{rsa_key}",
         )
 
     """

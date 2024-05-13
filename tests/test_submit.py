@@ -4,16 +4,14 @@ import sys
 from func_preprocess import submit
 
 
-def test_submit_subprocess_local(fixt_setup):
-    job_out, job_err = submit.submit_subprocess(
-        True, "echo foo local", "foo_sub_local", fixt_setup.log_dir
-    )
+def test_submit_subprocess(fixt_setup):
+    job_out, job_err = submit.submit_subprocess("echo foo local")
     assert "foo local\n" == job_out.decode("utf-8")
 
 
-def test_submit_subprocess_sched(fixt_setup):
-    job_out, job_err = submit.submit_subprocess(
-        False, "echo foo sched", "foo_sub_sched", fixt_setup.log_dir
+def test_schedule_subprocess(fixt_setup):
+    job_out, job_err = submit.schedule_subprocess(
+        "echo foo sched", "foo_sub_sched", fixt_setup.log_dir
     )
     assert os.path.exists(
         os.path.join(fixt_setup.log_dir, "err_foo_sub_sched.log")
@@ -39,16 +37,9 @@ class Test_schedule_subj:
             fixt_setup.group_raw,
             fixt_setup.group_deriv,
             fixt_setup.work_dir,
-            os.environ["SING_FMRIPREP"],
-            os.environ["SINGULARITYENV_TEMPLATEFLOW_HOME"],
-            os.environ["FS_LICENSE"],
             0.5,
             True,
-            os.environ["SING_AFNI"],
             fixt_setup.log_dir,
-            False,
-            os.environ["USER"],
-            os.environ["RSA_LS2"],
             schedule_job=False,
         )
         py_script = os.path.join(
@@ -72,9 +63,6 @@ class Test_schedule_subj:
             4: "#SBATCH --time=60:00:00",
             5: "#SBATCH --cpus-per-task=4",
             6: "#SBATCH --mem-per-cpu=6G",
-            8: "import os",
-            9: "import sys",
-            10: "from func_preprocess import workflows",
         }
 
     @property
@@ -83,11 +71,11 @@ class Test_schedule_subj:
         # More options could be tested, these
         # were easiest to avoid str issues.
         return {
+            10: "from func_preprocess import workflows",
             12: "workflows.run_preproc(",
-            21: "0.5,",
-            22: "True,",
-            25: "False,",
-            28: ")",
+            18: "0.5,",
+            19: "True,",
+            21: ")",
         }
 
     def test_script_head(self):

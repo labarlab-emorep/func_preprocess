@@ -156,7 +156,6 @@ class TestHelperMeths:
 def test_FslMethods(fixt_setup, fixt_afni_fsl):
     # init
     assert fixt_afni_fsl.afni_fsl._log_dir == fixt_setup.log_dir
-    assert not fixt_afni_fsl.afni_fsl._run_local
 
     # Methods - check output desc fields, could be more robust.
     assert "tmean" == fixt_afni_fsl.run_tmean.split("desc-")[1].split("_")[0]
@@ -228,9 +227,6 @@ class TestAfniCmds:
 
 @pytest.mark.preproc
 def test_AfniMethods(fixt_afni_fsl):
-    # init
-    assert os.environ["SING_AFNI"] == fixt_afni_fsl.afni_fsl._sing_afni
-
     # Methods - checks output desc fields, could be more robust.
     assert "scaled" == fixt_afni_fsl.out_scaled.split("desc-")[1].split("_")[0]
     assert (
