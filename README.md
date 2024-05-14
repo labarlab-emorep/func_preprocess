@@ -3,6 +3,7 @@ This package conducts pre-processing for functional MRI data, and is used for bo
 
 Contents:
 - [Setup](#setup)
+- [Testing](#testing)
 - [Usage](#usage)
 - [Functionality](#functionality)
 - [Notes](#notes)
@@ -12,12 +13,18 @@ Contents:
 ## Setup
 - Install into project environment on the Duke Compute Cluster (DCC; see [here](https://github.com/labarlab/conda_dcc)) via `$ python setup.py install`.
 - Singularity images are required for AFNI and fMRIPrep, and FreeSurfer and FSL should be configured in the environment.
+- Generate an RSA key for labarserv2 and set the global variable `RSA_LS2` to hold the key path.
 - Required global variables:
     - `SING_AFNI`: singularity image of AFNI
     - `SING_FMRIPREP`: singularity image of fMRIPrep
     - `SINGULARITYENV_TEMPLATEFLOW_HOME`: location of templateflow
     - `FS_LICENSE`: location of FreeSurfer license
     - `FSLDIR`: location of FSL binaries
+    - `RSA_LS2`: location of RSA key for labarserv2
+
+
+## Testing
+Planned unit and integration tests are available at `tests/run_tests.py` and executable via `$cd tests; python run_tests.py`. ***Note:*** testing is only supported on a scheduled node of the DCC with 5 CPUs and 24 GB RAM: `$srun --cpus-per-task 5 --mem 24G --pty bash -i`.
 
 
 ## Usage
@@ -25,11 +32,9 @@ Trigger package help and usage via entrypoint `$ func_preprocess`
 
 ```
 (emorep)[nmm51-dcc: ~]$func_preprocess
-usage: func_preprocess [-h] [--fd-thresh FD_THRESH] [--ignore-fmaps] [--proj-dir PROJ_DIR] [--rsa-key RSA_KEY]
-                       [--run-local] [--ses-list SES_LIST [SES_LIST ...]] [--work-dir WORK_DIR] -s SUB_LIST
-                       [SUB_LIST ...]
+usage: func_preprocess [-h] [--fd-thresh FD_THRESH] [--ignore-fmaps] [--proj-dir PROJ_DIR] [--sess {ses-day2,ses-day3} [{ses-day2,ses-day3} ...]] -s SUBJ [SUBJ ...]
 
-Version : 2.4.0
+Version : 2.5.0
 
 Conduct preprocessing for EmoRep.
 
@@ -58,63 +63,40 @@ Notes
     -   SINGULARITYENV_TEMPLATEFLOW_HOME = path to templateflow for fmriprep
     -   FS_LICENSE = path to FreeSurfer license
     -   FSLDIR = path to FSL binaries
+    -   RSA_LS2 = path to RSA key for labarserv2
 
 - FSL should be also be configured in the environment.
 
-- When running remotely, parent job "p<subj>" is submitted for each subject
-    that controls the workflow. Named subprocesses "<subj>foo" are spawned
-    when additional resources are required.
+- Long file paths can result in a buffer overflow of FreeSurfer tools!
 
 Examples
 --------
-func_preprocess -s sub-ER0009 --rsa-key $RSA_LS2
-
+func_preprocess -s sub-ER0009
 func_preprocess \
     -s sub-ER0009 sub-ER0010 \
-    --ses-list ses-day2 \
-    --rsa-key $RSA_LS2 \
+    --sess ses-day2 \
     --fd-thresh 0.2 \
     --ignore-fmaps
-
-projDir=/mnt/keoki/experiments2/EmoRep/Exp2_Compute_Emotion/data_scanner_BIDS
-workDir=${projDir}/derivatives/pre_processing
-func_preprocess \
-    --run-local \
-    --proj-dir $projDir \
-    --work-dir $workDir \
-    -s sub-ER0009 sub-ER0016
 
 optional arguments:
   -h, --help            show this help message and exit
   --fd-thresh FD_THRESH
                         Framewise displacement threshold
                         (default : 0.5)
-  --ignore-fmaps        Whether fmriprep will ignore fmaps,
-                        True if "--ignore-fmaps" else False.
-  --proj-dir PROJ_DIR   Required when --run-local.
-                        Path to BIDS-formatted project directory
+  --ignore-fmaps        Whether fmriprep will ignore fmaps
+  --proj-dir PROJ_DIR   Path to BIDS-formatted project directory
                         (default : /hpc/group/labarlab/EmoRep/Exp2_Compute_Emotion/data_scanner_BIDS)
-  --rsa-key RSA_KEY     Required on DCC; location of labarserv2 RSA key
-  --run-local           Run pipeline locally on labarserv2 rather than on
-                        default DCC.
-                        True if "--run-local" else False.
-  --ses-list SES_LIST [SES_LIST ...]
+  --sess {ses-day2,ses-day3} [{ses-day2,ses-day3} ...]
                         List of session IDs to submit for pre-processing
                         (default : ['ses-day2', 'ses-day3'])
-  --work-dir WORK_DIR   Required when --run-local.
-                        Path to derivatives location on work partition, for processing
-                        intermediates. If None, the work-dir will setup in
-                        /work/<user>/EmoRep/derivatives. Be mindful of path lengths
-                        to avoid a buffer overflow in FreeSurfer.
-                        (default : None)
 
 Required Arguments:
-  -s SUB_LIST [SUB_LIST ...], --sub-list SUB_LIST [SUB_LIST ...]
+  -s SUBJ [SUBJ ...], --subj SUBJ [SUBJ ...]
                         List of subject IDs to submit for pre-processing
 
 ```
 
-The workflow used for processing Exp2 and Exp3 data utilize the default options (first example), with other options supplied for usability.
+The workflow for processing Exp2 and Exp3 data utilize the default options (first example), with other options supplied for usability.
 
 
 ## Functionality

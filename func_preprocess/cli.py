@@ -25,33 +25,23 @@ Notes
     -   SINGULARITYENV_TEMPLATEFLOW_HOME = path to templateflow for fmriprep
     -   FS_LICENSE = path to FreeSurfer license
     -   FSLDIR = path to FSL binaries
+    -   RSA_LS2 = path to RSA key for labarserv2
 
 - FSL should be also be configured in the environment.
 
-- When running remotely, parent job "p<subj>" is submitted for each subject
-    that controls the workflow. Named subprocesses "<subj>foo" are spawned
-    when additional resources are required.
+- Long file paths can result in a buffer overflow of FreeSurfer tools!
 
 Examples
 --------
-func_preprocess -s sub-ER0009 --rsa-key $RSA_LS2
-
+func_preprocess -s sub-ER0009
 func_preprocess \
     -s sub-ER0009 sub-ER0010 \
-    --ses-list ses-day2 \
-    --rsa-key $RSA_LS2 \
+    --sess ses-day2 \
     --fd-thresh 0.2 \
     --ignore-fmaps
 
-projDir=/mnt/keoki/experiments2/EmoRep/Exp2_Compute_Emotion/data_scanner_BIDS
-workDir=${projDir}/derivatives/pre_processing
-func_preprocess \
-    --run-local \
-    --proj-dir $projDir \
-    --work-dir $workDir \
-    -s sub-ER0009 sub-ER0016
-
 """
+
 # %%
 import os
 import sys
@@ -60,6 +50,7 @@ import textwrap
 from datetime import datetime
 from argparse import ArgumentParser, RawTextHelpFormatter
 import func_preprocess._version as ver
+from func_preprocess import submit
 
 
 # %%
@@ -83,12 +74,7 @@ def _get_args():
     parser.add_argument(
         "--ignore-fmaps",
         action="store_true",
-        help=textwrap.dedent(
-            """\
-            Whether fmriprep will ignore fmaps,
-            True if "--ignore-fmaps" else False.
-            """
-        ),
+        help="Whether fmriprep will ignore fmaps",
     )
     parser.add_argument(
         "--proj-dir",
@@ -96,32 +82,17 @@ def _get_args():
         default="/hpc/group/labarlab/EmoRep/Exp2_Compute_Emotion/data_scanner_BIDS",  # noqa: E501
         help=textwrap.dedent(
             """\
-            Required when --run-local.
             Path to BIDS-formatted project directory
             (default : %(default)s)
             """
         ),
     )
+
     parser.add_argument(
-        "--rsa-key",
-        type=str,
-        help="Required on DCC; location of labarserv2 RSA key",
-    )
-    parser.add_argument(
-        "--run-local",
-        action="store_true",
-        help=textwrap.dedent(
-            """\
-            Run pipeline locally on labarserv2 rather than on
-            default DCC.
-            True if "--run-local" else False.
-            """
-        ),
-    )
-    parser.add_argument(
-        "--ses-list",
+        "--sess",
         nargs="+",
         default=["ses-day2", "ses-day3"],
+        choices=["ses-day2", "ses-day3"],
         help=textwrap.dedent(
             """\
             List of session IDs to submit for pre-processing
@@ -130,32 +101,13 @@ def _get_args():
         ),
         type=str,
     )
-    parser.add_argument(
-        "--work-dir",
-        type=str,
-        default=None,
-        help=textwrap.dedent(
-            """\
-            Required when --run-local.
-            Path to derivatives location on work partition, for processing
-            intermediates. If None, the work-dir will setup in
-            /work/<user>/EmoRep/derivatives. Be mindful of path lengths
-            to avoid a buffer overflow in FreeSurfer.
-            (default : %(default)s)
-            """
-        ),
-    )
 
     required_args = parser.add_argument_group("Required Arguments")
     required_args.add_argument(
         "-s",
-        "--sub-list",
+        "--subj",
         nargs="+",
-        help=textwrap.dedent(
-            """\
-            List of subject IDs to submit for pre-processing
-            """
-        ),
+        help="List of subject IDs to submit for pre-processing",
         type=str,
         required=True,
     )
@@ -169,86 +121,44 @@ def _get_args():
 
 # %%
 def main():
-    """Setup working environment."""
+    """Trigger workflow for each subject."""
 
     # Capture CLI arguments
     args = _get_args().parse_args()
-    subj_list = args.sub_list
+    subj_list = args.subj
     proj_dir = args.proj_dir
-    work_deriv = args.work_dir
     ignore_fmaps = args.ignore_fmaps
     fd_thresh = args.fd_thresh
-    run_local = args.run_local
-    rsa_key = args.rsa_key
-    ses_list = args.ses_list
+    sess_list = args.sess
 
     # Check run_local, work_deriv, and proj_dir. Set paths.
-    if run_local and not work_deriv:
-        raise ValueError("Option --work-deriv required with --run-local.")
-    if run_local and not os.path.exists(work_deriv):
-        raise FileNotFoundError(f"Expected to find directory : {work_deriv}")
     if not os.path.exists(proj_dir):
         raise FileNotFoundError(f"Expected to find directory : {proj_dir}")
-    if not run_local and rsa_key is None:
-        raise ValueError("RSA key required on DCC")
     proj_raw = os.path.join(proj_dir, "rawdata")
     proj_deriv = os.path.join(proj_dir, "derivatives/pre_processing")
 
-    # Get, check environmental vars
-    sing_afni = os.environ["SING_AFNI"]
-    sing_fmriprep = os.environ["SING_FMRIPREP"]
-    fs_license = os.environ["FS_LICENSE"]
-    tplflow_dir = os.environ["SINGULARITYENV_TEMPLATEFLOW_HOME"]
-    if not run_local:
-        user_name = os.environ["USER"]
-
-    try:
-        os.environ["FSLDIR"]
-    except KeyError:
-        print("Missing required global variable FSLDIR")
-        sys.exit(1)
-
     # Setup work directory, for intermediates and logs
-    if not work_deriv:
-        work_deriv = os.path.join(
-            "/work",
-            user_name,
-            "EmoRep/pre_processing",
-        )
+    work_deriv = os.path.join("/work", os.environ["USER"], "EmoRep")
     now_time = datetime.now()
     log_dir = os.path.join(
-        os.path.dirname(work_deriv),
+        work_deriv,
         f"logs/func_preproc_{now_time.strftime('%y%m%d_%H%M')}",
     )
     if not os.path.exists(log_dir):
         os.makedirs(log_dir)
 
-    # Get, submit appropriate workflow method
-    if run_local:
-        from func_preprocess.workflows import run_preproc as wf_obj
-    else:
-        from func_preprocess.submit import schedule_subj as wf_obj
-
+    # Submit workflow
     for subj in subj_list:
-        wf_args = [
+        submit.schedule_subj(
             subj,
-            ses_list,
+            sess_list,
             proj_raw,
             proj_deriv,
             work_deriv,
-            sing_fmriprep,
-            tplflow_dir,
-            fs_license,
             fd_thresh,
             ignore_fmaps,
-            sing_afni,
             log_dir,
-            run_local,
-        ]
-        if not run_local:
-            wf_args.append(user_name)
-            wf_args.append(rsa_key)
-        wf_obj(*wf_args)
+        )
         time.sleep(3)
 
 
