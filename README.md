@@ -11,8 +11,9 @@ Contents:
 
 
 ## Setup
-- Install into project environment on the Duke Compute Cluster (DCC; see [here](https://github.com/labarlab/conda_dcc)) via `$ python setup.py install`.
-- Singularity images are required for AFNI and fMRIPrep, and FreeSurfer and FSL should be configured in the environment.
+- Install into project environment on the Duke Compute Cluster (DCC; see [here](https://github.com/labarlab/conda_dcc)) via `$python setup.py install`.
+- Singularity images are required for AFNI and fMRIPrep
+- FreeSurfer and FSL need to be configured and executable from the shell
 - Generate an RSA key for labarserv2 and set the global variable `RSA_LS2` to hold the key path.
 - Required global variables:
     - `SING_AFNI`: singularity image of AFNI
@@ -24,11 +25,12 @@ Contents:
 
 
 ## Testing
-Planned unit and integration tests are available at `tests/run_tests.py` and executable via `$cd tests; python run_tests.py`. ***Note:*** testing is only supported on a scheduled node of the DCC with 5 CPUs and 24 GB RAM: `$srun --cpus-per-task 5 --mem 24G --pty bash -i`.
+- Planned unit and integration tests are available at `tests/run_tests.py` and executable via `$cd tests; python run_tests.py`.
+- ***Note:*** testing is only supported on a scheduled node of the DCC with 5 CPUs and 24 GB RAM: `$srun --cpus-per-task 5 --mem 24G --pty bash -i`.
 
 
 ## Usage
-Trigger package help and usage via entrypoint `$ func_preprocess`
+Trigger package help and usage via entrypoint `$func_preprocess`
 
 ```
 (emorep)[nmm51-dcc: ~]$func_preprocess
@@ -96,35 +98,10 @@ Required Arguments:
 
 ```
 
-The workflow for processing Exp2 and Exp3 data utilize the default options (first example), with other options supplied for usability.
+The workflow for processing EmoRep and Archival data utilize the default options (first example), with other options supplied for flexibility.
 
 
 ## Functionality
-`func_preprocess` runs parallel workflows for each session of a participant's `rawdata`, generating output into the structure:
-
-```bash
-derivatives/pre_processing/
-├── fmriprep
-│   ├── sub-ER0009
-|   ..
-│   └── sub-ER1137
-├── freesurfer
-│   ├── ses-day2
-|   |   ├── sub-ER0009
-|   |   ..
-│   |   └── sub-ER1137
-│   └── ses-day3
-|       ├── sub-ER0009
-|       ..
-│       └── sub-ER1137
-└── fsl_denoise
-    ├── sub-ER0009
-    ..
-    └── sub-ER1137
-```
-
-The `fmriprep` and `fsl_denoise` output directories are BIDS-organized, but the `freesurfer` organization inverts subject and session.
-
 Generally, the steps to the pre-processing workflow are:
 
 1. Download data from Keoki to DCC
@@ -137,15 +114,39 @@ Generally, the steps to the pre-processing workflow are:
     1. Mask data
 1. Upload data to Keoki and clean up DCC
 
+`func_preprocess` runs parallel workflows for each participant's session. Output is saved in a derivatives/pre_processing directory:
+
+```bash
+derivatives/pre_processing/
+├── fmriprep
+│   ├── sub-ER0009
+│   ├── sub-ER0009_ses-day2.html
+│   ..
+│   ├── sub-ER9999
+│   └── sub-ER9999_ses-day2.html
+├── freesurfer
+│   └── ses-day2
+│      ├── sub-ER0009
+│      ..
+│      └── sub-ER9999
+└── fsl_denoise
+    ├── sub-ER0009
+    ..
+    └── sub-ER9999
+```
+
+Where fmriprep and fsl_denoise are BIDS-organized, but freesurfer inverts the session and subject organization. The fmriprep and freesurfer directories are organized according to the defaults of those software suites, and fsl_denoise employs the BIDS organization with an added `desc-scaled|smoothed` field.
+
 Also, see [Diagrams](#diagrams).
 
-The first and last steps are omitted if run locally (but FreeSurfer and fMRIPrep have not been recently tested on labarserv2).
 
 ## Notes
-- Data are downloaded from Keoki to `/hpc/group/labarlab/EmoRep`
-- Processing occurs in `/work/<user>/EmoRep`, and final files are sent to `/hpc/group/labarlab/EmoRep/derivatives/pre_processing`.
-- Logs are written to `/work/<user>/EmoRep/logs`, as are the python scripts for the parent jobs. Stdout/err for parent jobs are captured in `par0009.txt`, and stdout/err for child jobs are captured in `subj_sess_desc.txt` e.g. `0009_day2_fmriprep.txt`
+- Data are downloaded from Keoki to the DCC location /hpc/group/labarlab/EmoRep
+- Processing occurs in /work/user/EmoRep, and final files are sent to /hpc/group/labarlab/EmoRep/derivatives/pre_processing.
+- Logs are written to /work/user/EmoRep/logs, as are the python scripts for the parent jobs. Stdout/err for parent jobs are captured in par0009.txt, and stdout/err for child jobs are captured in subj_sess_desc.txt e.g. 0009_day2_fmriprep.txt
 - If the default `--sess-list` is used, data from both session are required and the entire workflow will fail if one session fails or is missing. Specify the existing session when only session exists or rerunning a specific session e.g. `--sess-list ses-day2`
+- Long file paths can result in buffer overflow errors for FreeSurfer!
+
 
 ## Diagrams
 Diagram of processes, showing workflow as a function of package methods. Additionally, parent and child processes are illustrated, as well as which steps are multi-processed.
