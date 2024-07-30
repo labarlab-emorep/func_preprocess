@@ -1,20 +1,12 @@
 # func_preprocess
-This package conducts pre-processing for functional MRI data, and is used for both Exp2_Compute_Emotion and Exp3_Classify_Archival datasets.
-
-Contents:
-- [Setup](#setup)
-- [Testing](#testing)
-- [Usage](#usage)
-- [Functionality](#functionality)
-- [Notes](#notes)
-- [Diagrams](#diagrams)
+This package conducts pre-processing for functional MRI data and is used for both Exp2_Compute_Emotion and Exp3_Classify_Archival datasets.
 
 
 ## Setup
 - Install into project environment on the Duke Compute Cluster (DCC; see [here](https://github.com/labarlab/conda_dcc)) via `$python setup.py install`.
 - Singularity images are required for AFNI and fMRIPrep
 - FreeSurfer and FSL need to be configured and executable from the shell
-- Generate an RSA key for labarserv2 and set the global variable `RSA_LS2` to hold the key path.
+- Generate an [RSA key](https://www.digitalocean.com/community/tutorials/how-to-set-up-ssh-keys-on-ubuntu-20-04) for labarserv2 and set the global variable `RSA_LS2` to hold the key path.
 - Required global variables:
     - `SING_AFNI`: singularity image of AFNI
     - `SING_FMRIPREP`: singularity image of fMRIPrep
@@ -39,6 +31,8 @@ usage: func_preprocess [-h] [--fd-thresh FD_THRESH] [--ignore-fmaps] [--proj-dir
 Version : 2.5.0
 
 Conduct preprocessing for EmoRep.
+
+Written for execution on the Duke Compute Cluster.
 
 Download required data from Keoki, preprocess EPI data via FreeSurfer,
 fMRIPrep, and extra FSL and AFNI steps. Generates scaled and smoothed
@@ -102,7 +96,7 @@ The workflow for processing EmoRep and Archival data utilize the default options
 
 
 ## Functionality
-Generally, the steps to the pre-processing workflow are:
+Generally, the pre-processing workflow steps are:
 
 1. Download data from Keoki to DCC
 1. Pre-run FreeSurfer
@@ -135,7 +129,7 @@ derivatives/pre_processing/
     └── sub-ER9999
 ```
 
-Where fmriprep and fsl_denoise are BIDS-organized, but freesurfer inverts the session and subject organization. The fmriprep and freesurfer directories are organized according to the defaults of those software suites, and fsl_denoise employs the BIDS organization with an added `desc-scaled|smoothed` field.
+The fmriprep and freesurfer directories are organized according to the defaults of those software suites, and fsl_denoise employs the BIDS organization with an added `desc-scaled|smoothed` field.
 
 Also, see [Diagrams](#diagrams).
 
@@ -144,6 +138,9 @@ Also, see [Diagrams](#diagrams).
 - Data are downloaded from Keoki to the DCC location /hpc/group/labarlab/EmoRep
 - Processing occurs in /work/user/EmoRep, and final files are sent to /hpc/group/labarlab/EmoRep/derivatives/pre_processing.
 - Logs are written to /work/user/EmoRep/logs, as are the python scripts for the parent jobs. Stdout/err for parent jobs are captured in par0009.txt, and stdout/err for child jobs are captured in subj_sess_desc.txt e.g. 0009_day2_fmriprep.txt
+
+
+## Considerations
 - If the default `--sess-list` is used, data from both session are required and the entire workflow will fail if one session fails or is missing. Specify the existing session when only session exists or rerunning a specific session e.g. `--sess-list ses-day2`
 - Long file paths can result in buffer overflow errors for FreeSurfer!
 

@@ -1,5 +1,7 @@
 r"""Conduct preprocessing for EmoRep.
 
+Written for execution on the Duke Compute Cluster.
+
 Download required data from Keoki, preprocess EPI data via FreeSurfer,
 fMRIPrep, and extra FSL and AFNI steps. Generates scaled and smoothed
 EPI output. Upload files to Keoki. Sessions are treated independently
@@ -47,6 +49,7 @@ import os
 import sys
 import time
 import textwrap
+import platform
 from datetime import datetime
 from argparse import ArgumentParser, RawTextHelpFormatter
 import func_preprocess._version as ver
@@ -74,7 +77,7 @@ def _get_args():
     parser.add_argument(
         "--ignore-fmaps",
         action="store_true",
-        help="Whether fmriprep will ignore fmaps",
+        help="Ignore incorporating fmaps during fmriprep",
     )
     parser.add_argument(
         "--proj-dir",
@@ -122,6 +125,10 @@ def _get_args():
 # %%
 def main():
     """Trigger workflow for each subject."""
+    # Check env
+    if "dcc" not in platform.uname().node:
+        print("func_preprocess workflow is required to run on DCC.")
+        sys.exit(1)
 
     # Capture CLI arguments
     args = _get_args().parse_args()
