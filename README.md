@@ -141,7 +141,7 @@ Also, see [Diagrams](#diagrams).
 
 
 ## Considerations
-- If the default `--sess-list` is used, data from both session are required and the entire workflow will fail if one session fails or is missing. Specify the existing session when only session exists or rerunning a specific session e.g. `--sess-list ses-day2`
+- If the default `--sess` is used, data from both session are required and the entire workflow will fail if one session fails or is missing. Specify the existing session when only session exists or rerunning a specific session e.g. `--sess ses-day2`
 - Long file paths can result in buffer overflow errors for FreeSurfer!
 
 
