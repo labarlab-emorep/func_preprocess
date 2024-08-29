@@ -329,9 +329,17 @@ class RunFmriprep:
             f"{self._work_deriv}/fmriprep/ses-*/{self._subj}/ses-*/func"
         )
         preproc_bold = sorted(
-            glob.glob(f"{search_path}/*desc-preproc_bold.nii.gz")
+            glob.glob(
+                f"{search_path}/*space-MNI152NLin6Asym_res-2_"
+                + "desc-preproc_bold.nii.gz"
+            )
         )
-        mask_bold = sorted(glob.glob(f"{search_path}/*desc-brain_mask.nii.gz"))
+        mask_bold = sorted(
+            glob.glob(
+                f"{search_path}/*space-MNI152NLin6Asym_res-2_"
+                + "desc-brain_mask.nii.gz"
+            )
+        )
 
         # Check lists
         if not preproc_bold and not mask_bold:
