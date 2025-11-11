@@ -11,7 +11,7 @@ from typing import Union
 
 def test_dir() -> Union[str, os.PathLike]:
     """Return path to project testing directory."""
-    return f"/work/{os.environ['USER']}/EmoRep/tests"
+    return f"{os.environ["WORK_DIR"]}/{os.environ['USER']}/EmoRep/tests"
 
 
 def check_test_env():

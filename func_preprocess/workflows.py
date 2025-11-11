@@ -18,7 +18,7 @@ def run_preproc(
     fd_thresh,
     ignore_fmaps,
     log_dir,
-    keoki_path="/mnt/keoki/experiments2/EmoRep/Exp2_Compute_Emotion/data_scanner_BIDS",  # noqa: E501
+    server_path=os.environ["SERVER_BIDS_DIR"],  # noqa: E501
     test_mode=False,
 ):
     """Functional preprocessing pipeline for EmoRep.
@@ -41,8 +41,8 @@ def run_preproc(
         Whether to incorporate fmaps in preprocessing
     log_dir : str, os.PathLike
         Location for writing logs
-    keoki_path : str, os.PathLike, optional
-        Location of project directory on Keoki
+    server_path : str, os.PathLike, optional
+        Location of project directory on lab data server
     test_mode : bool, optional
         Used to avoid data push, cleanup during testing
 
@@ -65,7 +65,7 @@ def run_preproc(
 
     # Download needed files
     sync_data = helper_tools.PullPush(
-        os.path.dirname(proj_raw), log_dir, keoki_path
+        os.path.dirname(proj_raw), log_dir, server_path
     )
     for sess in sess_list:
         _ = sync_data.pull_rawdata(subj, sess)
@@ -101,7 +101,7 @@ def run_preproc(
         log_dir,
     )
 
-    # Send data to keoki and clean up
+    # Send data to lab data server and clean up
     if test_mode:
         return
     sync_data.push_derivatives(sess_list)

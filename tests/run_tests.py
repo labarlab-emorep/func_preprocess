@@ -1,6 +1,6 @@
 """Conduct user-requested unit and integration tests.
 
-Tests are conducted in "/work/$(whoami)/EmoRep/tests" which is
+Tests are conducted in "os.environ["WORK_DIR"]/$(whoami)/EmoRep/tests" which is
 removed if all requested tests pass.
 
 Examples

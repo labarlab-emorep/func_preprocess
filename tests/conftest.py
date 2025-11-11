@@ -26,9 +26,7 @@ def fixt_setup() -> Iterator[UnitTestVars]:
     group_dir = os.path.join(test_dir, "group")
     group_raw = os.path.join(group_dir, "rawdata")
     group_deriv = os.path.join(group_dir, "derivatives/pre_processing")
-    keoki_path = (
-        "/mnt/keoki/experiments2/EmoRep/Exp2_Compute_Emotion/data_scanner_BIDS"
-    )
+    server_path = os.environ["SERVER_BIDS_DIR"]
     for mk_dir in [log_dir, work_dir, group_raw, group_deriv]:
         if not os.path.exists(mk_dir):
             os.makedirs(mk_dir)
@@ -41,7 +39,7 @@ def fixt_setup() -> Iterator[UnitTestVars]:
     sync_data = helper_tools.PullPush(
         group_dir,
         log_dir,
-        keoki_path,
+        server_path,
     )
     group_niis = sync_data.pull_rawdata(subj, sess)
 
@@ -85,7 +83,7 @@ def fixt_freesurfer(fixt_setup) -> Iterator[UnitTestVars]:
 
     # Get check file
     src = os.path.join(
-        fixt_setup.sync_data._keoki_proj,
+        fixt_setup.sync_data._server_proj,
         "derivatives/pre_processing/freesurfer",
         fixt_setup.sess,
         fixt_setup.subj,
@@ -111,13 +109,13 @@ def fixt_fmriprep(fixt_setup) -> Iterator[UnitTestVars]:
     if not os.path.exists(dst_fp):
         os.makedirs(dst_fp)
     src_fp1 = os.path.join(
-        fixt_setup.sync_data._keoki_proj,
+        fixt_setup.sync_data._server_proj,
         "derivatives/pre_processing/fmriprep",
         fixt_setup.subj,
         fixt_setup.sess,
     )
     src_fp2 = os.path.join(
-        fixt_setup.sync_data._keoki_proj,
+        fixt_setup.sync_data._server_proj,
         "derivatives/pre_processing/fmriprep",
         f"{fixt_setup.subj}_{fixt_setup.sess}.html",
     )

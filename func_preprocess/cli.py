@@ -2,9 +2,9 @@ r"""Conduct preprocessing for EmoRep.
 
 Written for execution on the Duke Compute Cluster.
 
-Download required data from Keoki, preprocess EPI data via FreeSurfer,
+Download required data from lab data server, preprocess EPI data via FreeSurfer,
 fMRIPrep, and extra FSL and AFNI steps. Generates scaled and smoothed
-EPI output. Upload files to Keoki. Sessions are treated independently
+EPI output. Upload files to lab data server. Sessions are treated independently
 for FreeSurfer and fMRIPrep.
 
 The workflow writes files to <work_dir>, and when finished purges
@@ -27,7 +27,7 @@ Notes
     -   SINGULARITYENV_TEMPLATEFLOW_HOME = path to templateflow for fmriprep
     -   FS_LICENSE = path to FreeSurfer license
     -   FSLDIR = path to FSL binaries
-    -   RSA_LS2 = path to RSA key for labarserv2
+    -   RSA_LS2 = path to RSA key for lab server
 
 - FSL should be also be configured in the environment.
 
@@ -82,7 +82,7 @@ def _get_args():
     parser.add_argument(
         "--proj-dir",
         type=str,
-        default="/hpc/group/labarlab/EmoRep/Exp2_Compute_Emotion/data_scanner_BIDS",  # noqa: E501
+        default=os.environ["CLUSTER_BIDS_DIR"],  # noqa: E501
         help=textwrap.dedent(
             """\
             Path to BIDS-formatted project directory
@@ -145,7 +145,7 @@ def main():
     proj_deriv = os.path.join(proj_dir, "derivatives/pre_processing")
 
     # Setup work directory, for intermediates and logs
-    work_deriv = os.path.join("/work", os.environ["USER"], "EmoRep")
+    work_deriv = os.path.join(os.environ["WORK_DIR"], os.environ["USER"], "EmoRep")
     now_time = datetime.now()
     log_dir = os.path.join(
         work_deriv,

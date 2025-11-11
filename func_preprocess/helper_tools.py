@@ -2,7 +2,7 @@
 
 check_env : raise EnvironmentError for missing globals
 copy_clean : copy intermediates in work to group, purge work
-PullPush : down/upload relevant files from/to Keoki
+PullPush : down/upload relevant files from/to lab data server
 ExtraPreproc : FSL and AFNI methods for extra preprocessing steps
 
 """
@@ -78,10 +78,10 @@ def copy_clean(subj, sess_list, proj_deriv, work_deriv, log_dir):
 
 
 class PullPush:
-    """Interact with Keoki to get and send data.
+    """Interact with lab data server to get and send data.
 
     Download required files for preprocessing, send
-    final files back to Keoki.
+    final files back to lab data server.
 
     Parameters
     ----------
@@ -89,15 +89,15 @@ class PullPush:
         Location of project directory on group partition
     log_dir : str, os.PathLike
         Output location for log files and scripts
-    keoki_path : str, os.PathLike
-        Location of project directory on Keoki
+    server_path : str, os.PathLike
+        Location of project directory on lab data server
 
     Methods
     -------
     pull_rawdata(subj, sess)
-        Download rawdata from Keoki
+        Download rawdata from lab data server
     push_derivatives(sess_list)
-        Upload preprocessed files to Keoki
+        Upload preprocessed files to lab data server
 
     Example
     -------
@@ -115,7 +115,7 @@ class PullPush:
         self,
         proj_dir,
         log_dir,
-        keoki_path,
+        server_path,
     ):
         """Initialize."""
         print("Initializing PullPush")
@@ -126,14 +126,14 @@ class PullPush:
             raise e
 
         self._dcc_proj = proj_dir
-        self._keoki_ip = "ccn-labarserv2.vm.duke.edu"
-        self._keoki_proj = (
-            f"{os.environ['USER']}@{self._keoki_ip}:{keoki_path}"
+        self._server_ip = os.environ["SERVER_ADDR"]
+        self._server_proj = (
+            f"{os.environ['USER']}@{self._server_ip}:{server_path}"
         )
         self._log_dir = log_dir
 
     def pull_rawdata(self, subj, sess):
-        """Download subject, session rawdata from Keoki.
+        """Download subject, session rawdata from lab data server.
 
         Parameters
         ----------
@@ -158,8 +158,8 @@ class PullPush:
 
         # Identify source, pull data
         print(f"\tDownloading rawdata to : {dcc_raw}")
-        keoki_raw = os.path.join(self._keoki_proj, "rawdata", subj, sess)
-        raw_out, raw_err = self._submit_rsync(keoki_raw, dcc_raw)
+        server_raw = os.path.join(self._server_proj, "rawdata", subj, sess)
+        raw_out, raw_err = self._submit_rsync(server_raw, dcc_raw)
 
         # Check setup
         raw_niis = sorted(
@@ -167,13 +167,13 @@ class PullPush:
         )
         if not raw_niis:
             raise FileNotFoundError(
-                "Error in Keoki->DCC rawdata file transfer:\n\n"
+                "Error in lab server->DCC rawdata file transfer:\n\n"
                 + f"stdout:\t{raw_out}\n\nstderr:\t{raw_err}"
             )
         return raw_niis
 
     def push_derivatives(self, sess_list):
-        """Send final derivatives to Keoki and clean DCC.
+        """Send final derivatives to lab data server and clean DCC.
 
         Parameters
         ----------
@@ -186,37 +186,37 @@ class PullPush:
             self._dcc_step = os.path.join(
                 self._dcc_proj, "derivatives", "pre_processing", step
             )
-            self._keoki_step = os.path.join(
-                self._keoki_proj, "derivatives", "pre_processing", step
+            self._server_step = os.path.join(
+                self._server_proj, "derivatives", "pre_processing", step
             )
             push_meth = getattr(self, f"_push_{step}")
             push_meth()
 
     def _push_fmriprep(self):
-        """Send fMRIPrep to Keoki."""
+        """Send fMRIPrep to lab data server."""
         print(f"\tUploading fMRIPrep for : {self._subj}")
         src_fp = os.path.join(self._dcc_step, f"{self._subj}*")
-        _, _ = self._submit_rsync(src_fp, self._keoki_step)
+        _, _ = self._submit_rsync(src_fp, self._server_step)
         self._submit_rm(src_fp)
 
     def _push_freesurfer(self):
-        """Send freesurfer to Keoki."""
+        """Send freesurfer to lab data server."""
         for self._sess in self._sess_list:
             print(f"\tUploading FreeSurfer for : {self._subj}, {self._sess}")
             src_fs = os.path.join(self._dcc_step, self._sess, self._subj)
-            dst_fs = os.path.join(self._keoki_step, self._sess)
+            dst_fs = os.path.join(self._server_step, self._sess)
             _, _ = self._submit_rsync(src_fs, dst_fs)
             self._submit_rm(src_fs)
 
     def _push_fsl_denoise(self):
-        """Send FSL preproc to Keoki."""
+        """Send FSL preproc to lab data server."""
         print(f"\tUploading FSL preproc for : {self._subj}")
         src_fsl = os.path.join(self._dcc_step, self._subj)
-        _, _ = self._submit_rsync(src_fsl, self._keoki_step)
+        _, _ = self._submit_rsync(src_fsl, self._server_step)
         self._submit_rm(src_fsl)
 
     def _submit_rsync(self, src: str, dst: str) -> Tuple:
-        """Execute rsync between DCC and labarserv2."""
+        """Execute rsync between DCC and lab server."""
         bash_cmd = f"""\
             rsync \
             -e 'ssh -i {os.environ["RSA_LS2"]}' \

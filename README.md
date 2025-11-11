@@ -6,14 +6,14 @@ This package conducts pre-processing for functional MRI data and is used for bot
 - Install into project environment on the Duke Compute Cluster (DCC; see [here](https://github.com/labarlab/conda_dcc)) via `$python setup.py install`.
 - Singularity images are required for AFNI and fMRIPrep
 - FreeSurfer and FSL need to be configured and executable from the shell
-- Generate an [RSA key](https://www.digitalocean.com/community/tutorials/how-to-set-up-ssh-keys-on-ubuntu-20-04) for labarserv2 and set the global variable `RSA_LS2` to hold the key path.
+- Generate an [RSA key](https://www.digitalocean.com/community/tutorials/how-to-set-up-ssh-keys-on-ubuntu-20-04) for lab server and set the global variable `RSA_LS2` to hold the key path.
 - Required global variables:
     - `SING_AFNI`: singularity image of AFNI
     - `SING_FMRIPREP`: singularity image of fMRIPrep
     - `SINGULARITYENV_TEMPLATEFLOW_HOME`: location of templateflow
     - `FS_LICENSE`: location of FreeSurfer license
     - `FSLDIR`: location of FSL binaries
-    - `RSA_LS2`: location of RSA key for labarserv2
+    - `RSA_LS2`: location of RSA key for lab server
 
 
 ## Testing
@@ -25,7 +25,7 @@ This package conducts pre-processing for functional MRI data and is used for bot
 Trigger package help and usage via entrypoint `$func_preprocess`
 
 ```
-(emorep)[nmm51-dcc: ~]$func_preprocess
+$func_preprocess
 usage: func_preprocess [-h] [--fd-thresh FD_THRESH] [--ignore-fmaps] [--proj-dir PROJ_DIR] [--sess {ses-day2,ses-day3} [{ses-day2,ses-day3} ...]] -s SUBJ [SUBJ ...]
 
 Version : 2.5.0
@@ -34,9 +34,9 @@ Conduct preprocessing for EmoRep.
 
 Written for execution on the Duke Compute Cluster.
 
-Download required data from Keoki, preprocess EPI data via FreeSurfer,
+Download required data from lab data server, preprocess EPI data via FreeSurfer,
 fMRIPrep, and extra FSL and AFNI steps. Generates scaled and smoothed
-EPI output. Upload files to Keoki. Sessions are treated independently
+EPI output. Upload files to lab data server. Sessions are treated independently
 for FreeSurfer and fMRIPrep.
 
 The workflow writes files to <work_dir>, and when finished purges
@@ -59,7 +59,7 @@ Notes
     -   SINGULARITYENV_TEMPLATEFLOW_HOME = path to templateflow for fmriprep
     -   FS_LICENSE = path to FreeSurfer license
     -   FSLDIR = path to FSL binaries
-    -   RSA_LS2 = path to RSA key for labarserv2
+    -   RSA_LS2 = path to RSA key for lab server
 
 - FSL should be also be configured in the environment.
 
@@ -81,7 +81,7 @@ optional arguments:
                         (default : 0.5)
   --ignore-fmaps        Whether fmriprep will ignore fmaps
   --proj-dir PROJ_DIR   Path to BIDS-formatted project directory
-                        (default : /hpc/group/labarlab/EmoRep/Exp2_Compute_Emotion/data_scanner_BIDS)
+                        (default : os.environ["CLUSTER_BIDS_DIR"])
   --sess {ses-day2,ses-day3} [{ses-day2,ses-day3} ...]
                         List of session IDs to submit for pre-processing
                         (default : ['ses-day2', 'ses-day3'])
@@ -98,7 +98,7 @@ The workflow for processing EmoRep and Archival data utilize the default options
 ## Functionality
 Generally, the pre-processing workflow steps are:
 
-1. Download data from Keoki to DCC
+1. Download data from lab data server to DCC
 1. Pre-run FreeSurfer
 1. Run fMRIPrep
 1. Conduct extra pre-processing steps:
@@ -106,7 +106,7 @@ Generally, the pre-processing workflow steps are:
     1. Scaling
     1. (optional) Smoothing
     1. Mask data
-1. Upload data to Keoki and clean up DCC
+1. Upload data to lab data server and clean up DCC
 
 `func_preprocess` runs parallel workflows for each participant's session. Output is saved in a derivatives/pre_processing directory:
 
@@ -135,9 +135,9 @@ Also, see [Diagrams](#diagrams).
 
 
 ## Notes
-- Data are downloaded from Keoki to the DCC location /hpc/group/labarlab/EmoRep
-- Processing occurs in /work/user/EmoRep, and final files are sent to /hpc/group/labarlab/EmoRep/derivatives/pre_processing.
-- Logs are written to /work/user/EmoRep/logs, as are the python scripts for the parent jobs. Stdout/err for parent jobs are captured in par0009.txt, and stdout/err for child jobs are captured in subj_sess_desc.txt e.g. 0009_day2_fmriprep.txt
+- Data are downloaded from the lab data server to the DCC
+- Processing occurs in os.environ["WORK_DIR"]/user/EmoRep, and final files are sent to the EmoRep/derivatives/pre_processing directory.
+- Logs are written to  os.environ["WORK_DIR"]/user/EmoRep/logs, as are the python scripts for the parent jobs. Stdout/err for parent jobs are captured in par0009.txt, and stdout/err for child jobs are captured in subj_sess_desc.txt e.g. 0009_day2_fmriprep.txt
 
 
 ## Considerations
